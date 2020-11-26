@@ -1,43 +1,8 @@
 import React from "react";
 import styled from 'styled-components';
 import { Dispatch, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import logo from "./logo.svg";
+import casLogo from "./279px-Cassandra_logo.svg.png";
 import "./App.css";
-
-/*const streamQuery = (appendResults: (newResults: Results) => void) => {
-  fetch("http://localhost:8080/query", {
-    method: "POST",
-    headers: {
-    },
-    body: "SELECT * FROM calloff.messages;",
-    //credentials: "include",
-  }).then(response => {
-    if (response.body === null) return;
-    const reader = response.body.getReader();
-    const stream = new ReadableStream({
-      start(controller) {
-        function push() {
-          reader.read().then(({ done, value }) => {
-            if (done) {
-              controller.close();
-              return;
-            }
-
-            const textDecoder = new TextDecoder("utf-8");
-
-            console.log("Value: ", textDecoder.decode(value));
-
-            controller.enqueue(value);
-            push();
-          });
-        }
-
-        push();
-      }
-    });
-    return stream;
-  });
-};*/
 
 const useWebsocket = (
   url: string,
@@ -186,13 +151,11 @@ const reducer = (state: State, action: Action) => {
   return state;
 };
 
-function renderColumn(column: ColumnValue) {
+function renderColumnValue(column: ColumnValue, index: number) {
   if (column.Text !== undefined) {
-    return <td>
-      <TextValue>{column.Text.s}</TextValue>
-    </td>;
+    return <TextValue>{column.Text.s}</TextValue>;
   } else {
-    return <td><UnknownValue>{JSON.stringify(column)}</UnknownValue></td>;
+    return <UnknownValue>{JSON.stringify(column)}</UnknownValue>;
   }
 }
 
@@ -214,14 +177,13 @@ function App() {
   const doQuery = useCallback(() => {
     console.log("query:", queryInput);
     dispatch({ type: ActionType.ON_CLEAR_RESULTS });
-    //sendQuery("SELECT * FROM calloff.messages;");
     sendQuery(queryInput);
   }, [sendQuery, queryInput]);
 
   return (
     <div className="App">
       <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
+        <img src={casLogo} className="App-logo" alt="logo" />
         <h1>Cassandra Tool</h1>
       </header>
       <section>
@@ -238,9 +200,12 @@ function App() {
               <Row key={"row-" + i}>
                 <RowNumber>{i}</RowNumber>
                 {/*row.toString()*/}
-                {row.columnValues.map(column => {
-                  return renderColumn(column);
-                  //return <td>{column.toString()}</td>;
+                {row.columnValues.map((column, i) => {
+                  return (
+                    <Cell key={"c" + i}>
+                      {renderColumnValue(column, i)}
+                    </Cell>
+                  );
                 })}
               </Row>
             );
@@ -272,6 +237,8 @@ const QueryInput = styled.input`
 const Row = styled.tr``;
 
 const RowNumber = styled.td``;
+
+const Cell = styled.td``;
 
 const TextValue = styled.span`
   color: #d22;
