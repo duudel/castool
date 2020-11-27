@@ -4,6 +4,8 @@ import { Dispatch, useCallback, useEffect, useReducer, useRef, useState } from "
 import casLogo from "./279px-Cassandra_logo.svg.png";
 import "./App.css";
 
+import { JsonSyntaxHighlight } from './JsonSyntaxHighlight';
+
 const useWebsocket = (
   url: string,
   //receive: (event: MessageEvent<any>) => void
@@ -51,11 +53,32 @@ const useWebsocket = (
   return [send];
 };
 
-type ColumnValue_Text = {
-  Text: { s: string; };
+type ColumnValue_Null = {
+  Null: { };
 };
 
-type ColumnValue = ColumnValue_Text | any;
+type ColumnValue_Ascii = {
+  Ascii: { };
+};
+
+type ColumnValue_Text = {
+  Text: { v: string; };
+};
+
+type ColumnValue_Integer = {
+  Integer: { v: number; };
+};
+
+type ColumnValue_BigInt = {
+  BigInt: { v: number; };
+};
+
+type ColumnValue = ColumnValue_Null
+  | ColumnValue_Ascii
+  | ColumnValue_BigInt
+  | ColumnValue_Integer
+  | ColumnValue_Text
+  | any;
 
 type ResultRow = {
   index: number;
@@ -65,11 +88,13 @@ type ResultRow = {
 interface State {
   columnDefinitions: any[];
   results: ResultRow[];
+  queryError: string | null;
 }
 
 const initialState: State = {
   columnDefinitions: [],
-  results: []
+  results: [],
+  queryError: null
 };
 
 enum ActionType {
@@ -125,7 +150,8 @@ function handleMessage(state: State, msg: QueryMessage): State {
       return state;
     }
     case "QueryMessageError": {
-      return state;
+      const { error }: QueryMessageError = msg;
+      return { ...state, results: [], queryError: error };
     }
     case "QueryMessageRows": {
       const rowsMessage: QueryMessageRows = msg;
@@ -152,20 +178,73 @@ const reducer = (state: State, action: Action) => {
 };
 
 function renderColumnValue(column: ColumnValue, index: number) {
-  if (column.Text !== undefined) {
-    return <TextValue>{column.Text.s}</TextValue>;
+  if (column.Null !== undefined) {
+    return <NullValue>NULL</NullValue>;
+  } else if (column.Ascii !== undefined) {
+    return <TextValue>{column.Ascii.v}</TextValue>;
+  } else if (column.Bool !== undefined) {
+    return <BooleanValue>{column.Bool.v ? "true" : "false"}</BooleanValue>;
+  } else if (column.BigInt !== undefined) {
+    return <IntegerValue>{column.BigInt.v}</IntegerValue>;
+  } else if (column.Integer !== undefined) {
+    return <IntegerValue>{column.Integer.v}</IntegerValue>;
+  } else if (column.SmallInt !== undefined) {
+    return <IntegerValue>{column.SmallInt.v}</IntegerValue>;
+  } else if (column.TinyInt !== undefined) {
+    return <IntegerValue>{column.TinyInt.v}</IntegerValue>;
+  } else if (column.TimeUuid !== undefined) {
+    return <IntegerValue>{column.TimeUuid.v}</IntegerValue>;
+  } else if (column.Text !== undefined) {
+    return <TextValue>{column.Text.v}</TextValue>;
+  } else if (column.Blob !== undefined) {
+    const s = atob(column.Blob.v);
+    const json = JSON.parse(s);
+    const pretty = JSON.stringify(json, null, 2);
+    return <LargeValue>
+      <JsonSyntaxHighlight value={pretty} nopre={false} />
+    </LargeValue>;
   } else {
     return <UnknownValue>{JSON.stringify(column)}</UnknownValue>;
   }
 }
 
+function renderRow(row: ResultRow, rowIndex: number) {
+  return (
+    <Row key={"row-" + rowIndex}>
+      <RowNumber>{rowIndex}</RowNumber>
+      {row.columnValues.map((column, i) => {
+        return (
+          <Cell key={"c" + i}>
+            {renderColumnValue(column, i)}
+          </Cell>
+        );
+      })}
+    </Row>
+  );
+}
+
+function renderQueryResults(state: State) {
+  const { results, queryError } = state;
+  if (queryError !== null) {
+    return (
+    <ErrorContainer>
+      <ErrorCaption>Error: </ErrorCaption>
+      <ErrorContent>{queryError}</ErrorContent>
+    </ErrorContainer>
+    );
+  } else {
+    return (
+      <ResultsTable>
+        <thead></thead>
+        <tbody>
+          {results.map((row, i) => renderRow(row, i))}
+        </tbody>
+      </ResultsTable>
+    );
+  }
+}
+
 function App() {
-  //const [results, setResults] = useState<Results>([]);
-  //const appendResults = useCallback(
-  //  (newResults: Results) => setResults(results.concat(newResults)),
-  //  [results, setResults]);
-  //const [sendQuery] = useWebsocket("ws://localhost:8080/squery", event => appendResults([event.data]));
-  
   const [queryInput, setQueryInput] = useState("SELECT * FROM calloff.messages;");
 
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -181,43 +260,42 @@ function App() {
   }, [sendQuery, queryInput]);
 
   return (
-    <div className="App">
-      <header className="App-header">
+    <AppContainer>
+      <Header>
         <img src={casLogo} className="App-logo" alt="logo" />
         <h1>Cassandra Tool</h1>
-      </header>
+      </Header>
       <section>
         <QueryInput
           value={queryInput}
           onChange={ev => setQueryInput(ev.target.value)}
         />
         <Button onClick={() => doQuery()}>Execute</Button>
-        <table>
-        <thead></thead>
-        <tbody>
-          {state.results.map((row, i) => {
-            return (
-              <Row key={"row-" + i}>
-                <RowNumber>{i}</RowNumber>
-                {/*row.toString()*/}
-                {row.columnValues.map((column, i) => {
-                  return (
-                    <Cell key={"c" + i}>
-                      {renderColumnValue(column, i)}
-                    </Cell>
-                  );
-                })}
-              </Row>
-            );
-          })}
-        </tbody>
-        </table>
+        {renderQueryResults(state)}
       </section>
-    </div>
+    </AppContainer>
   );
 }
 
 export default App;
+
+const AppContainer = styled.div`
+  overflow: scroll;
+`;
+
+const Header = styled.header`
+  position: sticky;
+  left: 0;
+  
+  background-color: #282c34;
+  min-height: 20vh;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+`;
 
 const Button = styled.button`
   padding: 10px;
@@ -234,14 +312,61 @@ const QueryInput = styled.input`
   width: 60%;
 `;
 
+const ErrorContainer = styled.div`
+  padding: 10px;
+  font-size: 11pt;
+`;
+
+const ErrorCaption = styled.div`
+  font-size: 12pt;
+`;
+
+const ErrorContent = styled.div`
+  font-size: 10pt;
+  color: #d22;
+`;
+
+const ResultsTable = styled.table`
+  border-collapse: collapse;
+  border-spacing: 0px;
+`;
+
 const Row = styled.tr``;
 
-const RowNumber = styled.td``;
+const RowNumber = styled.td`
+  padding: 5px;
+  border: 0.5px solid #ccc;
+  background-color: #eee;
+`;
 
-const Cell = styled.td``;
+const Cell = styled.td`
+  margin: 0;
+  padding: 5px;
+  border: 0.5px solid #ccc;
+`;
+
+const NullValue = styled.span`
+  color: #aa9;
+  font-size: 10pt;
+  font-weight: bold;
+`;
+
+const BooleanValue = styled.span`
+  color: #22a;
+  font-weight: bold;
+`;
+
+const IntegerValue = styled.span`
+  color: #c2c;
+`;
 
 const TextValue = styled.span`
   color: #d22;
+`;
+
+const LargeValue = styled.div`
+  overflow: scroll;
+  max-height: 260px;
 `;
 
 const UnknownValue = styled.span`

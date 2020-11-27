@@ -1,0 +1,15 @@
+.json-field {
+    color: #00a0a0;
+}
+
+.json-bool, .json-num, .json-null {
+    color: #c000c0;
+}
+
+.json-str {
+    color: #a0a000;
+}
+
+.json-brace, .json-bracket {
+    color: #005050;
+}
