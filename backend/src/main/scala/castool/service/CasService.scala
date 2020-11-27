@@ -28,29 +28,6 @@ import com.datastax.oss.driver.api.core.`type`.DataTypes
 import org.http4s.server.websocket.WebSocketBuilder
 import org.http4s.websocket.WebSocketFrame
 
-sealed trait QueryMessage;
-
-object QueryMessageSuccess extends QueryMessage 
-case class QueryMessageError(error: String) extends QueryMessage
-case class QueryMessageRows(rows: Seq[ResultRow]) extends QueryMessage
-
-object QueryMessage {
-  implicit val decoder: Decoder[QueryMessage] = deriveDecoder
-  implicit val encoder: Encoder[QueryMessage] = deriveEncoder
-}
-
-object Test {
-  def printJson(a: QueryMessage): Unit = {
-    println(a.asJson)
-  }
-
-  //def doIt() {
-  //  printJson(QueryMessageSuccess)
-  //  printJson(QueryMessageError("Syntax was bad"))
-  //  printJson(QueryMessageRows(Seq(ResultRow(10L, Seq(castool.cassandra.Text("Text value"))))))
-  //}
-}
-
 class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Effect: ContextShift] extends Http4sDsl[F] {
   type STask[A] = RIO[R, A]
   val dsl = Http4sDsl[STask]
@@ -112,12 +89,6 @@ class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Eff
               case ex: com.datastax.oss.driver.api.core.servererrors.SyntaxError =>
                 ZIO.succeed(ZStream(QueryMessageError(ex.getMessage())))
             }
-          //result = (queryResult match {
-          //  case QueryMessageError(error) =>
-          //    val closeEither = WebSocketFrame.Close(PolicyViolation, error)
-          //    closeEither.fold(ex => ZStream.die(ex): ZStream[Any, Throwable, Nothing], close => ZStream.apply(close))
-          //  case rows: com.datastax.oss.driver.api.core.cql.ResultSet =>
-          //}): ZStream[Any with zio.clock.Clock, Throwable, WebSocketFrame]
         } yield result
       }
 
