@@ -10,6 +10,8 @@ export interface Parser {
   line: number;
   lineLimit: number;
   results: ParserResults;
+  pendingError: string | null;
+  error: boolean;
 }
 
 export const createParser = (value: string, lineLimit?: number): Parser => ({
@@ -17,7 +19,9 @@ export const createParser = (value: string, lineLimit?: number): Parser => ({
   pos: 0,
   line: 0,
   lineLimit: (lineLimit === undefined) ? Infinity : lineLimit,
-  results: []
+  results: [],
+  pendingError: null,
+  error: false
 });
 
 const errorLocation = (parser: Parser) => {
@@ -46,11 +50,6 @@ const errorLocation = (parser: Parser) => {
   const c = parser.value.charAt(parser.pos);
   return before + "<" + c + "(" + c.charCodeAt(0) + ")>" + after + "\nL: " + line;
 };
-
-const syntaxError = (parser: Parser, error: string) => {
-  const message = error + " at\n" + errorLocation(parser);
-  throw Error(message);
-}
 
 const isNumeric = (c: string): boolean => {
   return '0' <= c && c <= '9';
@@ -100,10 +99,22 @@ const acceptWhile = (parser: Parser, predicate: (v: string) => boolean): boolean
   return result;
 };
 
+const emitPendingError = (parser: Parser) => {
+  if (parser.pendingError !== null) {
+    add(parser, [parser.pendingError, "json-error"]);
+    parser.pendingError = null;
+  }
+}
+
 const eatWhitespace = (parser: Parser): void => {
-  const start = parser.pos;
+  let start = parser.pos;
   while (inputLeft(parser) && isWhitespace(current(parser))) {
     if (current(parser) === '\n') {
+      if (parser.pendingError) {
+        add(parser, [parser.value.substr(start, parser.pos - start), ""]);
+        start = parser.pos;
+        emitPendingError(parser);
+      }
       parser.line++;
     }
     parser.pos++;
@@ -111,15 +122,48 @@ const eatWhitespace = (parser: Parser): void => {
   if (parser.pos > start) {
     add(parser, [parser.value.substr(start, parser.pos - start), ""]);
   }
+  if (!inputLeft(parser)) emitPendingError(parser);
 };
 
-export const parseField = (parser: Parser): boolean => {
+const skipToken = (parser: Parser, skipWhile?: (c: string) => boolean) => {
+  if (!inputLeft(parser)) return;
+  const c = current(parser);
+  if (skipWhile !== undefined) {
+    const start = parser.pos;
+    acceptWhile(parser, skipWhile);
+    addSubstring(parser, start, "json-invalid-token");
+  } else if (isNumeric(c)) {
+    const start = parser.pos;
+    acceptWhile(parser, isNumeric);
+    addSubstring(parser, start, "json-invalid-token");
+  } else if (('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z')) {
+    const start = parser.pos;
+    acceptWhile(parser, c => ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z') || isNumeric(c));
+    addSubstring(parser, start, "json-invalid-token");
+  } else {
+    add(parser, [c, "json-invalid-token"]);
+    parser.pos++;
+  }
+};
+
+const syntaxError = (parser: Parser, error: string, skipWhile?: (c: string) => boolean) => {
+  //const message = error + " at\n" + errorLocation(parser);
+  //throw Error(message);
+  skipToken(parser, skipWhile);
+  if (parser.pendingError === null) {
+    parser.pendingError = error;
+  }
+  parser.error = true;
+}
+
+const parseField = (parser: Parser): boolean => {
   if (!accept(parser, '"')) return false;
 
   const fieldStart = parser.pos - 1;
   while ((parser.pos < parser.value.length) && !current_is(parser, '"')) parser.pos++;
   if (!accept(parser, '"')) {
-    syntaxError(parser, "No ending quote for propery");
+    syntaxError(parser, "No ending quote for property");
+    return false;
   }
 
   const field = parser.value.substr(fieldStart, parser.pos - fieldStart);
@@ -127,10 +171,10 @@ export const parseField = (parser: Parser): boolean => {
   return true;
 }
 
-export const parseJson = (parser: Parser): ParserResults => {
+const parseJsonImpl = (parser: Parser) => {
   eatWhitespace(parser);
 
-  if (!inputLeft(parser)) return parser.results;
+  if (!inputLeft(parser)) return;
 
   switch (current(parser)) {
     case '{': {
@@ -140,34 +184,54 @@ export const parseJson = (parser: Parser): ParserResults => {
         // Empty object
         break;
       }
-      while (true) {
+      while (inputLeft(parser)) {
         eatWhitespace(parser);
-        if (lineLimitReached(parser)) return parser.results;
+        if (lineLimitReached(parser)) return;
         if (!parseField(parser)) {
           syntaxError(parser, "Expected property name");
+          //continue;
+          eatWhitespace(parser);
+          if (accept(parser, '}', ['}', "json-brace"])) {
+            break;
+          } else if (accept(parser, ',', [',', "json-comma"])) {
+            continue;
+          } else {
+            break;
+          }
         }
         eatWhitespace(parser);
-        if (lineLimitReached(parser)) return parser.results;
+        if (lineLimitReached(parser)) return;
         if (!accept(parser, ':', [':', ""])) {
           syntaxError(parser, "Expected ':'");
+          continue;
         }
 
+        eatWhitespace(parser);
         parseJson(parser);
         eatWhitespace(parser);
-        if (lineLimitReached(parser)) return parser.results;
+        if (lineLimitReached(parser)) return;
 
         if (accept(parser, '}', ['}', "json-brace"])) {
           break;
-        }
-        if (!accept(parser, ',', [',', "json-comma"])) {
-          syntaxError(parser, "Expected end of object '}' or ',' and a new property");
+        } else if (accept(parser, ',', [',', "json-comma"])) {
+          continue;
+        } else {
+          syntaxError(parser, "Expected end of object '}' or ',' followed by a new property", c => c !== ',' && c !== '}' && c !== '\n');
+          eatWhitespace(parser);
+          if (accept(parser, '}', ['}', "json-brace"])) {
+            break;
+          } else if (accept(parser, ',', [',', "json-comma"])) {
+            continue;
+          } else {
+            break;
+          }
         }
       }
     } break;
     case '[': {
       accept(parser, '[', ['[', "json-bracket"]);
       eatWhitespace(parser);
-      if (lineLimitReached(parser)) return parser.results;
+      if (lineLimitReached(parser)) return;
 
       if (accept(parser, ']', [']', "json-bracket"])) {
         // Empty array
@@ -177,7 +241,7 @@ export const parseJson = (parser: Parser): ParserResults => {
       while (true) {
         parseJson(parser);
         eatWhitespace(parser);
-        if (lineLimitReached(parser)) return parser.results;
+        if (lineLimitReached(parser)) return;
 
         if (!accept(parser, ',', [',', "json-comma"]))
           break;
@@ -190,8 +254,18 @@ export const parseJson = (parser: Parser): ParserResults => {
       // TODO: parse escape sequences, at least for \".
       const strStart = parser.pos;
       parser.pos++;
-      while ((parser.pos < parser.value.length) && !current_is(parser, '"')) parser.pos++;
-      accept(parser, '"');
+      while ((parser.pos < parser.value.length)) {
+        if (current_is(parser, '"')) {
+          parser.pos++;
+          break;
+        }
+        if (current_is(parser, '\n')) {
+          parser.pos = strStart;
+          syntaxError(parser, "No ending quote for string");
+          return parser.results;
+        }
+        parser.pos++;
+      }
 
       addSubstring(parser, strStart, "json-str");
     } break;
@@ -219,9 +293,13 @@ export const parseJson = (parser: Parser): ParserResults => {
       addSubstring(parser, numStart, "json-num");
     } break;
     default:
-      syntaxError(parser, "Invalid character");
+      syntaxError(parser, "Invalid character '" + current(parser) + "'");
+      eatWhitespace(parser);
   }
-
-  return parser.results;
 }
 
+export const parseJson = (parser: Parser): ParserResults => {
+  parseJsonImpl(parser);
+  if (!inputLeft(parser)) emitPendingError(parser);
+  return parser.results;
+}

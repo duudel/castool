@@ -1,15 +1,26 @@
 .json-field {
-    color: #00a0a0;
+  color: #00a0a0;
 }
 
 .json-bool, .json-num, .json-null {
-    color: #c000c0;
+  color: #c000c0;
 }
 
 .json-str {
-    color: #a0a000;
+  color: #a0a000;
 }
 
 .json-brace, .json-bracket {
-    color: #005050;
+  color: #005050;
+}
+
+.json-invalid-token {
+  color: #f00;
+}
+
+.json-error {
+  position: absolute;
+  color: #f00;
+  font-weight: bold;
+  margin-left: 8em;
 }

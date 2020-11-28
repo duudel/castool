@@ -259,6 +259,8 @@ function App() {
     sendQuery(queryInput);
   }, [sendQuery, queryInput]);
 
+  const invalidJson = '{\n    "callOff": {\n        "consignee": {\n            "addressLine1": ",\n            "addressLine2": "",\n            "finalDeliveryId": "",\n            "recipient": ""\n        },\n        "id": "mLK2DS67_A00046001078R01",\n        "inhouseCallOffId": "",\n        "messageInfo": {\n            "documentId": "mLK2DS67",\n            "issued": ?"2020-07-16T10:47:14.563Z"\n        },\n        "meta": {\n            "created": "2020-07-16T10:47:14.564Z",\n            "requestId": "NoRequestId",\n            "sourceSystem": "SAP",\n            "status": "Created"\n        },\n        "parts": \n            {\n                "deliveries": [\n                    {\n                        "amount": 24,\n                        "amountDecimal": 24,\n                        "isForecast": false,\n                        "pickup": "2020-07-16"\n                    },\n                    {\n                        "amount": 48,\n                        "amountDecimal": 48,\n                        "isForecast": false,\n                        "pickup": "2020-07-23"\n                    },\n                    {\n                        "amount": 15,\n                        "amountDecimal": 15,\n                        "isForecast": false,\n                        "pickup": "2020-07-30"\n                    }\n                ],\n                "isSynchro": false,\n                "name": "",\n                "partNumber": "A00046001078R01",\n                "salesOrderId": ""\n            }\n        ],\n        "serialNumber": "12345",\n        "supplier": {\n            "supplierId": "10001154K"\n        },\n        "synchro": false,\n        "synchroForecast": false\n    },\n    "requestId": "NoRequestId"\n}\n'
+
   return (
     <AppContainer>
       <Header>
@@ -271,6 +273,10 @@ function App() {
           onChange={ev => setQueryInput(ev.target.value)}
         />
         <Button onClick={() => doQuery()}>Execute</Button>
+        <JsonSyntaxHighlight
+          value={'{\n "Kala": kukko,\n "other-object": {]\n}'}
+        />
+        <JsonSyntaxHighlight value={invalidJson} />
         {renderQueryResults(state)}
       </section>
     </AppContainer>
