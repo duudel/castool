@@ -4,54 +4,9 @@ import { Dispatch, useCallback, useEffect, useReducer, useRef, useState } from "
 import casLogo from "./279px-Cassandra_logo.svg.png";
 import "./App.css";
 
+import { useWebsocket } from './UseWebsocketHook';
+
 import { JsonSyntaxHighlight } from './JsonSyntaxHighlight';
-
-const useWebsocket = (
-  url: string,
-  //receive: (event: MessageEvent<any>) => void
-  dispatch: (msg: MessageEvent<any>) => void
-): [(msg: any) => void] => {
-  //const [reconnection, setReconnection] = useState(0);
-  const ws = useRef<WebSocket | null>(null);
-  const pending = useRef<any[]>([]);
-
-  const send = useCallback((msg: any): void => {
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(msg);
-    } else {
-      pending.current.push(msg);
-      //setReconnection(reconnection + 1);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (ws.current === null || ws.current.readyState === WebSocket.CLOSED) {
-      console.log("Create new websocket");
-      ws.current = new WebSocket(url);
-    }
-    return () => {
-      if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
-      console.log("Closing websocket");
-        ws.current.close();
-        ws.current = null;
-      }
-    };
-  }, [url]);
-  useEffect(() => {
-    if (ws.current) {
-      //console.log("Set message handler", receive);
-      //ws.current.addEventListener('message', receive);
-      console.log("Set message handler", dispatch);
-      ws.current.addEventListener('message', dispatch);
-      if (pending.current.length > 0) {
-        const oldPending = pending.current;
-        pending.current = [];
-        oldPending.forEach(p => send(p));
-      }
-    }
-  });
-  return [send];
-};
 
 type ColumnValue_Null = {
   Null: { };
@@ -250,7 +205,8 @@ function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const dispatchAction = useCallback((message: MessageEvent<any>) => {
     dispatch({ type: ActionType.ON_MESSAGE, message: message.data })
-  }, [dispatch]);
+  //}, [dispatch]);
+  }, []);
   const [sendQuery] = useWebsocket("ws://localhost:8080/squery", dispatchAction);
 
   const doQuery = useCallback(() => {
@@ -273,10 +229,10 @@ function App() {
           onChange={ev => setQueryInput(ev.target.value)}
         />
         <Button onClick={() => doQuery()}>Execute</Button>
-        <JsonSyntaxHighlight
+        {/*<JsonSyntaxHighlight
           value={'{\n "Kala": kukko,\n "other-object": {]\n}'}
         />
-        <JsonSyntaxHighlight value={invalidJson} />
+        <JsonSyntaxHighlight value={invalidJson} />*/}
         {renderQueryResults(state)}
       </section>
     </AppContainer>
