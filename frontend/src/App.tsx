@@ -35,13 +35,18 @@ type ColumnValue = ColumnValue_Null
   | ColumnValue_Text
   | any;
 
-type ResultRow = {
+interface ColumnDefinition {
+  name: string;
+  dataType: string;
+}
+
+interface ResultRow {
   index: number;
   columnValues: ColumnValue[];
-};
+}
 
 interface State {
-  columnDefinitions: any[];
+  columnDefinitions: ColumnDefinition[];
   results: ResultRow[];
   queryError: string | null;
 }
@@ -70,6 +75,7 @@ type Action = OnClearResultsAction | OnMessageAction;
 
 interface QueryMessageSuccess {
   type: "QueryMessageSuccess";
+  columns: ColumnDefinition[];
 }
 
 interface QueryMessageError {
@@ -102,7 +108,8 @@ function parseMessage(s: string): QueryMessage | undefined {
 function handleMessage(state: State, msg: QueryMessage): State {
   switch (msg.type) {
     case "QueryMessageSuccess": {
-      return state;
+      const { columns }: QueryMessageSuccess = msg;
+      return { ...state, columnDefinitions: columns };
     }
     case "QueryMessageError": {
       const { error }: QueryMessageError = msg;
@@ -163,6 +170,15 @@ function renderColumnValue(column: ColumnValue, index: number) {
   }
 }
 
+function renderColumnDef(def: ColumnDefinition, index: number) {
+  const { name, dataType } = def;
+  return (
+    <HeadCell>
+      <ColumnName>{name}</ColumnName><ColumnDataType>: {dataType}</ColumnDataType>
+    </HeadCell>
+  );
+}
+
 function renderRow(row: ResultRow, rowIndex: number) {
   return (
     <Row key={"row-" + rowIndex}>
@@ -179,7 +195,7 @@ function renderRow(row: ResultRow, rowIndex: number) {
 }
 
 function renderQueryResults(state: State) {
-  const { results, queryError } = state;
+  const { columnDefinitions, results, queryError } = state;
   if (queryError !== null) {
     return (
     <ErrorContainer>
@@ -190,7 +206,12 @@ function renderQueryResults(state: State) {
   } else {
     return (
       <ResultsTable>
-        <thead></thead>
+        <thead>
+          <Row key="column-defs">
+            <HeadCell />
+            {columnDefinitions.map((def, i) => renderColumnDef(def, i))}
+          </Row>
+        </thead>
         <tbody>
           {results.map((row, i) => renderRow(row, i))}
         </tbody>
@@ -223,12 +244,14 @@ function App() {
         <img src={casLogo} className="App-logo" alt="logo" />
         <h1>Cassandra Tool</h1>
       </Header>
-      <section>
+      <QueryInputContainer>
         <QueryInput
           value={queryInput}
           onChange={ev => setQueryInput(ev.target.value)}
         />
         <Button onClick={() => doQuery()}>Execute</Button>
+      </QueryInputContainer>
+      <section>
         {/*<JsonSyntaxHighlight
           value={'{\n "Kala": kukko,\n "other-object": {]\n}'}
         />
@@ -250,13 +273,23 @@ const Header = styled.header`
   left: 0;
   
   background-color: #282c34;
-  min-height: 20vh;
+  min-height: 15vh;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  font-size: calc(8px + 1vmin);
   color: white;
+`;
+
+const QueryInputContainer = styled.div`
+  position: sticky;
+  left: 0;
+  
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
 `;
 
 const Button = styled.button`
@@ -305,6 +338,23 @@ const Cell = styled.td`
   margin: 0;
   padding: 5px;
   border: 0.5px solid #ccc;
+`;
+
+const HeadCell = styled.th`
+  margin: 0;
+  padding: 5px;
+  border: 0.5px solid #ccc;
+  background-color: #eee;
+`;
+
+const ColumnName = styled.span`
+  font-weight: bold;
+  color: #000;
+`;
+
+const ColumnDataType = styled.span`
+  font-weight: normal;
+  color: #888;
 `;
 
 const NullValue = styled.span`
