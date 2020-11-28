@@ -81,7 +81,14 @@ class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Eff
               val rowsStream = extractRows(queryResult)
                 .groupedWithin(100, zio.duration.Duration.fromMillis(10))
                 .map(rows => QueryMessageRows(rows.iterator.toSeq))
-              ZStream(QueryMessageSuccess) ++ rowsStream
+              val columnDefs = queryResult.getColumnDefinitions().asScala.map { casColumnDef =>
+                val name = casColumnDef.getName().asCql(true)
+                ColumnDefinition(
+                  name = name,
+                  dataType = ColumnValue.DataType.fromCas(casColumnDef.getType())
+                )
+              }.toSeq
+              ZStream(QueryMessageSuccess(columnDefs)) ++ rowsStream
             }
             .catchSome {
               case ex: com.datastax.oss.driver.api.core.servererrors.InvalidQueryException =>

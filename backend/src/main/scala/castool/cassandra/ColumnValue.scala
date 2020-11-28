@@ -8,6 +8,7 @@ import io.circe.syntax._
 import io.circe.HCursor
 
 import com.datastax.oss.driver.api.core.cql
+import com.datastax.oss.driver.api.core.`type`.{DataType => CasDataType}
 import java.util.Base64
 import java.net.InetAddress
 
@@ -107,9 +108,61 @@ object ColumnValue {
         Unknown(columnDef.getName().asCql(true))
     }
   }
+  
+  object DataType extends Enumeration {
+    val Ascii = Value
+    val BigInt = Value
+    val Blob = Value
+    val Bool = Value
+    val Counter = Value
+    val Decimal = Value
+    val Double = Value
+    val Float = Value
+    val Integer = Value
+    val SmallInt = Value
+    val TinyInt = Value
+    val Timestamp = Value
+    val Uuid = Value
+    val VarInt = Value
+    val TimeUuid = Value
+    val Text = Value
+    val Inet = Value
+    val Date = Value
+    val Time = Value
+    val Duration = Value
+
+    implicit val encoder: Encoder[DataType] = Encoder.enumEncoder(DataType)
+    implicit val decoder: Decoder[DataType] = Decoder.enumDecoder(DataType)
+
+    def fromCas(dt: CasDataType): DataType = {
+      dt.getProtocolCode() match {
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.ASCII => Ascii
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BIGINT => BigInt
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BLOB => Blob
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BOOLEAN => Bool
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.COUNTER => Counter
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DECIMAL => Decimal
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DOUBLE => Double
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.FLOAT => Float
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INT => Integer
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SMALLINT => SmallInt
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TINYINT => TinyInt
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIMESTAMP => Timestamp
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.UUID => Uuid
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.VARINT => VarInt
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIMEUUID => TimeUuid
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.VARCHAR => Text
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INET => Inet
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DATE => Date
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DURATION => Duration
+      }
+    }
+  }
+  type DataType = DataType.Value
 }
 
 object ColumnValues {
+
   case object Null extends ColumnValue
   case class Unknown(v: String) extends ColumnValue
 
