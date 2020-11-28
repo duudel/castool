@@ -88,7 +88,7 @@ class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Eff
                   dataType = ColumnValue.DataType.fromCas(casColumnDef.getType())
                 )
               }.toSeq
-              ZStream(QueryMessageSuccess(columnDefs)) ++ rowsStream
+              ZStream(QueryMessageSuccess(columnDefs)) ++ rowsStream ++ ZStream(QueryMessageFinished)
             }
             .catchSome {
               case ex: com.datastax.oss.driver.api.core.servererrors.InvalidQueryException =>

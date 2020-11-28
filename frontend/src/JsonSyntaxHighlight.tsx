@@ -9,7 +9,7 @@ interface JsonSyntaxHighlightProps {
   nopre?: boolean;
 }
 
-export function JsonSyntaxHighlight(props: JsonSyntaxHighlightProps) {
+function JsonSyntaxHighlightImpl(props: JsonSyntaxHighlightProps) {
   const { value, nopre = false } = props;
   const [results, setResults] = useState<ParserResults>([]);
   const parse = useCallback((s: string) => {
@@ -47,6 +47,8 @@ export function JsonSyntaxHighlight(props: JsonSyntaxHighlightProps) {
     </pre>
   }
 }
+
+export const JsonSyntaxHighlight = React.memo(JsonSyntaxHighlightImpl);
 
 /*
 export class JsonSyntaxHighlight extends React.Component<JsonSyntaxHighlightProps> {

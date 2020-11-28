@@ -16,6 +16,7 @@ case class ColumnDefinition(
 case class QueryMessageSuccess(columns: Seq[ColumnDefinition]) extends QueryMessage 
 case class QueryMessageError(error: String) extends QueryMessage
 case class QueryMessageRows(rows: Seq[ResultRow]) extends QueryMessage
+case object QueryMessageFinished extends QueryMessage
 
 object QueryMessage {
   implicit val decoder: Decoder[QueryMessage] = deriveDecoder

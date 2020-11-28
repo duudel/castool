@@ -1,7 +1,9 @@
 import React from "react";
 import styled from 'styled-components';
 import { Dispatch, useCallback, useEffect, useReducer, useRef, useState } from "react";
-import casLogo from "./279px-Cassandra_logo.svg.png";
+//import casLogo from "./279px-Cassandra_logo.svg.png";
+//import casLogo from "./Apache-cassandra-icon.png";
+import casLogo from "./CasTool-2-icon.png";
 import "./App.css";
 
 import { useWebsocket } from './UseWebsocketHook';
@@ -45,33 +47,45 @@ interface ResultRow {
   columnValues: ColumnValue[];
 }
 
+enum QueryStatus {
+  Done,
+  InProgress
+}
+
 interface State {
   columnDefinitions: ColumnDefinition[];
   results: ResultRow[];
   queryError: string | null;
+  queryStatus: QueryStatus;
 }
 
 const initialState: State = {
   columnDefinitions: [],
   results: [],
-  queryError: null
+  queryError: null,
+  queryStatus: QueryStatus.Done,
 };
 
 enum ActionType {
   ON_CLEAR_RESULTS,
+  ON_START_QUERY,
   ON_MESSAGE,
 };
+
+interface OnClearResultsAction {
+  type: ActionType.ON_CLEAR_RESULTS;
+}
+
+interface OnStartQueryAction {
+  type: ActionType.ON_START_QUERY;
+}
 
 interface OnMessageAction {
   type: ActionType.ON_MESSAGE;
   message: any;
 }
 
-interface OnClearResultsAction {
-  type: ActionType.ON_CLEAR_RESULTS;
-}
-
-type Action = OnClearResultsAction | OnMessageAction;
+type Action = OnClearResultsAction | OnStartQueryAction | OnMessageAction;
 
 interface QueryMessageSuccess {
   type: "QueryMessageSuccess";
@@ -88,7 +102,15 @@ interface QueryMessageRows {
   rows: ResultRow[];
 }
 
-type QueryMessage = QueryMessageSuccess | QueryMessageError | QueryMessageRows;
+interface QueryMessageFinished {
+  type: "QueryMessageFinished";
+}
+
+type QueryMessage =
+    QueryMessageSuccess
+  | QueryMessageError
+  | QueryMessageRows
+  | QueryMessageFinished;
 
 function parseMessage(s: string): QueryMessage | undefined {
   const msg = JSON.parse(s);
@@ -102,7 +124,8 @@ function parseMessage(s: string): QueryMessage | undefined {
   }
   return extract("QueryMessageSuccess")
     || extract("QueryMessageError")
-    || extract("QueryMessageRows");
+    || extract("QueryMessageRows")
+    || extract("QueryMessageFinished");
 }
 
 function handleMessage(state: State, msg: QueryMessage): State {
@@ -120,6 +143,9 @@ function handleMessage(state: State, msg: QueryMessage): State {
       const rows = rowsMessage.rows;
       return { ...state, results: state.results.concat(rows) };
     }
+    case "QueryMessageFinished": {
+      return { ...state, queryStatus: QueryStatus.Done };
+    }
   }
   return state;
 }
@@ -128,6 +154,9 @@ const reducer = (state: State, action: Action) => {
   switch (action.type) {
     case ActionType.ON_CLEAR_RESULTS: {
       return { ...state, results: [] };
+    }
+    case ActionType.ON_START_QUERY: {
+      return { ...state, queryStatus: QueryStatus.InProgress };
     }
     case ActionType.ON_MESSAGE: {
       const { message } = action;
@@ -138,6 +167,35 @@ const reducer = (state: State, action: Action) => {
   }
   return state;
 };
+
+function columnValueToString(column: ColumnValue) {
+  if (column.Null !== undefined) {
+    return "NULL";
+  } else if (column.Ascii !== undefined) {
+    return column.Ascii.v;
+  } else if (column.Bool !== undefined) {
+    return column.Bool.v ? "true" : "false";
+  } else if (column.BigInt !== undefined) {
+    return column.BigInt.v.toString();
+  } else if (column.Integer !== undefined) {
+    return column.Integer.v.toString();
+  } else if (column.SmallInt !== undefined) {
+    return column.SmallInt.v.toString();
+  } else if (column.TinyInt !== undefined) {
+    return column.TinyInt.v.toString();
+  } else if (column.TimeUuid !== undefined) {
+    return column.TimeUuid.v;
+  } else if (column.Text !== undefined) {
+    return column.Text.v;
+  } else if (column.Blob !== undefined) {
+    const s = atob(column.Blob.v);
+    const json = JSON.parse(s);
+    const pretty = JSON.stringify(json, null, 2);
+    return pretty;
+  } else {
+    return JSON.stringify(column);
+  }
+}
 
 function renderColumnValue(column: ColumnValue, index: number) {
   if (column.Null !== undefined) {
@@ -160,11 +218,15 @@ function renderColumnValue(column: ColumnValue, index: number) {
     return <TextValue>{column.Text.v}</TextValue>;
   } else if (column.Blob !== undefined) {
     const s = atob(column.Blob.v);
-    const json = JSON.parse(s);
-    const pretty = JSON.stringify(json, null, 2);
-    return <LargeValue>
-      <JsonSyntaxHighlight value={pretty} nopre={false} />
-    </LargeValue>;
+    if (false)
+      return <LargeValue>{s}</LargeValue>;
+    else {
+      const json = JSON.parse(s);
+      const pretty = JSON.stringify(json, null, 2);
+      return <LargeValue>
+        <JsonSyntaxHighlight value={pretty} nopre={false} />
+      </LargeValue>;
+    }
   } else {
     return <UnknownValue>{JSON.stringify(column)}</UnknownValue>;
   }
@@ -173,10 +235,15 @@ function renderColumnValue(column: ColumnValue, index: number) {
 function renderColumnDef(def: ColumnDefinition, index: number) {
   const { name, dataType } = def;
   return (
-    <HeadCell>
+    <HeadCell key={name}>
       <ColumnName>{name}</ColumnName><ColumnDataType>: {dataType}</ColumnDataType>
     </HeadCell>
   );
+}
+
+function copyToClipBoardColumnValue(value: ColumnValue) {
+  const str = columnValueToString(value);
+  navigator.clipboard.writeText(str);
 }
 
 function renderRow(row: ResultRow, rowIndex: number) {
@@ -186,6 +253,9 @@ function renderRow(row: ResultRow, rowIndex: number) {
       {row.columnValues.map((column, i) => {
         return (
           <Cell key={"c" + i}>
+            <CopyIconContainer>
+              <CopyIcon onClick={() => copyToClipBoardColumnValue(column)}>⧉</CopyIcon>
+            </CopyIconContainer>
             {renderColumnValue(column, i)}
           </Cell>
         );
@@ -194,6 +264,41 @@ function renderRow(row: ResultRow, rowIndex: number) {
   );
 }
 
+interface QueryResultsSectionProps {
+  queryError: string | null;
+  columnDefs: ColumnDefinition[];
+  rows: ResultRow[];
+}
+
+function QueryResultsSectionImpl(props: QueryResultsSectionProps) {
+  const { queryError, columnDefs, rows } = props;
+  if (queryError !== null) {
+    return (
+    <ErrorContainer>
+      <ErrorCaption>Error: </ErrorCaption>
+      <ErrorContent>{queryError}</ErrorContent>
+    </ErrorContainer>
+    );
+  } else {
+    return (
+      <ResultsTable>
+        <thead>
+          <Row key="column-defs">
+            <HeadCell />
+            {columnDefs.map((def, i) => renderColumnDef(def, i))}
+          </Row>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => renderRow(row, i))}
+        </tbody>
+      </ResultsTable>
+    );
+  }
+}
+
+const QueryResultsSection = React.memo(QueryResultsSectionImpl);
+
+/*
 function renderQueryResults(state: State) {
   const { columnDefinitions, results, queryError } = state;
   if (queryError !== null) {
@@ -218,7 +323,7 @@ function renderQueryResults(state: State) {
       </ResultsTable>
     );
   }
-}
+}*/
 
 function App() {
   const [queryInput, setQueryInput] = useState("SELECT * FROM calloff.messages;");
@@ -233,14 +338,16 @@ function App() {
   const doQuery = useCallback(() => {
     console.log("query:", queryInput);
     dispatch({ type: ActionType.ON_CLEAR_RESULTS });
+    dispatch({ type: ActionType.ON_START_QUERY });
     sendQuery(queryInput);
   }, [sendQuery, queryInput]);
 
-  const invalidJson = '{\n    "callOff": {\n        "consignee": {\n            "addressLine1": ",\n            "addressLine2": "",\n            "finalDeliveryId": "",\n            "recipient": ""\n        },\n        "id": "mLK2DS67_A00046001078R01",\n        "inhouseCallOffId": "",\n        "messageInfo": {\n            "documentId": "mLK2DS67",\n            "issued": ?"2020-07-16T10:47:14.563Z"\n        },\n        "meta": {\n            "created": "2020-07-16T10:47:14.564Z",\n            "requestId": "NoRequestId",\n            "sourceSystem": "SAP",\n            "status": "Created"\n        },\n        "parts": \n            {\n                "deliveries": [\n                    {\n                        "amount": 24,\n                        "amountDecimal": 24,\n                        "isForecast": false,\n                        "pickup": "2020-07-16"\n                    },\n                    {\n                        "amount": 48,\n                        "amountDecimal": 48,\n                        "isForecast": false,\n                        "pickup": "2020-07-23"\n                    },\n                    {\n                        "amount": 15,\n                        "amountDecimal": 15,\n                        "isForecast": false,\n                        "pickup": "2020-07-30"\n                    }\n                ],\n                "isSynchro": false,\n                "name": "",\n                "partNumber": "A00046001078R01",\n                "salesOrderId": ""\n            }\n        ],\n        "serialNumber": "12345",\n        "supplier": {\n            "supplierId": "10001154K"\n        },\n        "synchro": false,\n        "synchroForecast": false\n    },\n    "requestId": "NoRequestId"\n}\n'
+  const logoIdle = state.queryStatus === QueryStatus.Done;
 
   return (
     <AppContainer>
       <Header>
+        <AppLogo src={casLogo} alt="cassandra-tool-logo" idle={logoIdle} />
         <img src={casLogo} className="App-logo" alt="logo" />
         <h1>Cassandra Tool</h1>
       </Header>
@@ -256,7 +363,11 @@ function App() {
           value={'{\n "Kala": kukko,\n "other-object": {]\n}'}
         />
         <JsonSyntaxHighlight value={invalidJson} />*/}
-        {renderQueryResults(state)}
+        <QueryResultsSection
+          queryError={state.queryError}
+          columnDefs={state.columnDefinitions}
+          rows={state.results}
+        />
       </section>
     </AppContainer>
   );
@@ -268,16 +379,27 @@ const AppContainer = styled.div`
   overflow: scroll;
 `;
 
+const AppLogo = styled.img<{ idle: boolean }>`
+  height: 10vmin;
+  pointer-events: none;
+  animation: ${({ idle }) =>
+    (idle ? "App-logo-blink infinite 16s linear" : "App-logo-exec infinite 1.6s linear")
+  }
+`;
+
 const Header = styled.header`
   position: sticky;
   left: 0;
   
   background-color: #282c34;
-  min-height: 15vh;
+  min-height: 12vh;
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
+
+  font-family: "Courier";
+  font-style: italic;
   font-size: calc(8px + 1vmin);
   color: white;
 `;
@@ -321,6 +443,28 @@ const ErrorContent = styled.div`
   color: #d22;
 `;
 
+const CopyIconContainer = styled.div`
+  position: relative;
+  float: right;
+  margin-right: 24px;
+`;
+
+const CopyIcon = styled.div`
+  position: absolute;
+  /*float: right;*/
+  padding: 2px;
+  height: 24px;
+  width: 20px;
+  font-size: 16px;
+  border: 1px solid black;
+  border-radius: 2px;
+  align-text: center;
+  background: #e8e8ef;
+  cursor: pointer;
+  opacity: 0.0;
+  transition: opacity linear 0.3s;
+`;
+
 const ResultsTable = styled.table`
   border-collapse: collapse;
   border-spacing: 0px;
@@ -338,6 +482,11 @@ const Cell = styled.td`
   margin: 0;
   padding: 5px;
   border: 0.5px solid #ccc;
+  vertical-align: top;
+
+  &:hover ${CopyIcon} {
+    opacity: 0.9;
+  }
 `;
 
 const HeadCell = styled.th`
