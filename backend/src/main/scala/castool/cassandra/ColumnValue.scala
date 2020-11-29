@@ -21,14 +21,6 @@ sealed trait ColumnValue
 object ColumnValue {
   import ColumnValues._
 
-  //implicit val inetDecoder: Decoder[InetAddress] = (cursor: HCursor) => for {
-  //  s <- cursor.as[String]
-  //  result <- Try(InetAddress.getByName(s))
-  //    .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
-  //} yield result
-
-  //implicit val inetEncoder: Encoder[InetAddress] = (inet: InetAddress) => Json.fromString(inet.getHostAddress())
-
   implicit val inetDecoder: Decoder[Inet] = (cursor: HCursor) => for {
     s <- cursor.as[String]
     result <- Try(Inet(InetAddress.getByName(s)))
