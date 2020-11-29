@@ -39,7 +39,7 @@ object Metadata {
 
   def fromOptional[A](opt: java.util.Optional[A]): Option[A] = if (opt.isPresent()) Some(opt.get) else None
 
-  def fromDriverMetadata(metadata: com.datastax.oss.driver.api.core.metadata.Metadata): Metadata = Metadata(
+  def fromDriverMetadata(metadata: driver.api.core.metadata.Metadata): Metadata = Metadata(
     clusterName = fromOptional(metadata.getClusterName()),
     nodes = metadata.getNodes().asScala.values.map(Node.fromDriverNode).toSeq
   )

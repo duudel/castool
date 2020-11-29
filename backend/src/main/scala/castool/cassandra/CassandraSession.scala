@@ -2,11 +2,11 @@ package castool.cassandra
 
 import java.net.InetSocketAddress
 
-import fs2.Stream
 import zio._
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.duration._
+import zio.stream._
 
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.cql
@@ -17,8 +17,8 @@ object CassandraSession {
   type CassandraSession = Has[Service]
 
   trait Service {
-    //def query(q: String): IO[Throwable, Stream[Task, ResultRow]]
-    def query(q: String): IO[Throwable, cql.ResultSet]
+    def query(q: String): IO[Throwable, (Seq[ColumnDefinition], ZStream[Any, Throwable, ResultRow])]
+    //def query(q: String): IO[Throwable, cql.ResultSet]
     def metadata: IO[Throwable, Metadata]
   }
 
@@ -44,8 +44,8 @@ object CassandraSession {
     }
   }
 
-  //def query(q: String): RIO[CassandraSession, Stream[Task, ResultRow]] = ZIO.accessM(_.get.query(q))
-  def query(q: String): RIO[CassandraSession, cql.ResultSet] = ZIO.accessM(_.get.query(q))
+  def query(q: String): RIO[CassandraSession, (Seq[ColumnDefinition], ZStream[Any, Throwable, ResultRow])] = ZIO.accessM(_.get.query(q))
+  //def query(q: String): RIO[CassandraSession, cql.ResultSet] = ZIO.accessM(_.get.query(q))
   def metadata: RIO[CassandraSession, Metadata] = ZIO.accessM(_.get.metadata)
 }
 

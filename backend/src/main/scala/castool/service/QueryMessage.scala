@@ -4,14 +4,9 @@ import io.circe._
 import io.circe.generic.auto._
 import io.circe.generic.semiauto._
 
-import castool.cassandra.{ColumnValue, ResultRow}
+import castool.cassandra.{ColumnDefinition, ColumnValue, ResultRow}
 
 sealed trait QueryMessage;
-
-case class ColumnDefinition(
-  name: String,
-  dataType: ColumnValue.DataType
-)
 
 case class QueryMessageSuccess(columns: Seq[ColumnDefinition]) extends QueryMessage 
 case class QueryMessageError(error: String) extends QueryMessage
