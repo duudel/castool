@@ -9,43 +9,7 @@ import "./App.css";
 import { useWebsocket } from './UseWebsocketHook';
 
 import { JsonSyntaxHighlight } from './JsonSyntaxHighlight';
-
-type ColumnValue_Null = {
-  Null: { };
-};
-
-type ColumnValue_Ascii = {
-  Ascii: { };
-};
-
-type ColumnValue_Text = {
-  Text: { v: string; };
-};
-
-type ColumnValue_Integer = {
-  Integer: { v: number; };
-};
-
-type ColumnValue_BigInt = {
-  BigInt: { v: number; };
-};
-
-type ColumnValue = ColumnValue_Null
-  | ColumnValue_Ascii
-  | ColumnValue_BigInt
-  | ColumnValue_Integer
-  | ColumnValue_Text
-  | any;
-
-interface ColumnDefinition {
-  name: string;
-  dataType: string;
-}
-
-interface ResultRow {
-  index: number;
-  columnValues: ColumnValue[];
-}
+import { ColumnDefinition, ColumnValue, ResultRow } from './types';
 
 enum QueryStatus {
   Done,
@@ -162,7 +126,7 @@ function handleMessage(state: State, msg: QueryMessage): State {
 const reducer = (state: State, action: Action) => {
   switch (action.type) {
     case ActionType.ON_CLEAR_RESULTS: {
-      return { ...state, results: [], resultsNum: null };
+      return { ...state, results: [], resultsNum: null, queryError: null };
     }
     case ActionType.ON_START_QUERY: {
       return { ...state, queryStatus: QueryStatus.InProgress, resultsNum: 0 };
@@ -225,6 +189,8 @@ function renderColumnValue(column: ColumnValue, index: number) {
     return <IntegerValue>{column.TimeUuid.v}</IntegerValue>;
   } else if (column.Text !== undefined) {
     return <TextValue>{column.Text.v}</TextValue>;
+  } else if (column.Timestamp !== undefined) {
+    return <TextValue>{column.Timestamp.v}</TextValue>;
   } else if (column.Blob !== undefined) {
     const s = atob(column.Blob.v);
     if (true)
@@ -258,7 +224,7 @@ function copyToClipBoardColumnValue(value: ColumnValue) {
 function renderRow(row: ResultRow, rowIndex: number) {
   return (
     <Row key={"row-" + rowIndex}>
-      <RowNumber>{rowIndex}</RowNumber>
+      <RowNumber>{row.index}</RowNumber>
       {row.columnValues.map((column, i) => {
         return (
           <Cell key={"c" + i}>
@@ -343,9 +309,12 @@ function App() {
   //}, [dispatch]);
   }, []);
   const [sendQuery] = useWebsocket("ws://localhost:8080/squery", dispatchAction);
+  
+  const [page, setPage] = useState(0);
 
   const doQuery = useCallback(() => {
     console.log("query:", queryInput);
+    setPage(0);
     dispatch({ type: ActionType.ON_CLEAR_RESULTS });
     dispatch({ type: ActionType.ON_START_QUERY });
     sendQuery(queryInput);
@@ -359,18 +328,23 @@ function App() {
         <AppLogo src={casLogo} alt="cassandra-tool-logo" idle={logoIdle} />
         <h1>Cassandra Tool</h1>
       </Header>
-      <QueryInputContainer>
-        <QueryInput
-          value={queryInput}
-          onChange={ev => setQueryInput(ev.target.value)}
-        />
-        <Button onClick={() => doQuery()}>Execute</Button>
-        {state.resultsNum !== null && <span>{state.resultsNum} results</span>}
-      </QueryInputContainer>
+      <TopSection>
+        <QueryInputContainer>
+          <QueryInput
+            value={queryInput}
+            onChange={ev => setQueryInput(ev.target.value)}
+          />
+          <Button onClick={() => doQuery()}>Execute</Button>
+          <ResultCounter>{state.resultsNum !== null && <span>{state.resultsNum} results</span>}</ResultCounter>
+        </QueryInputContainer>
+        <PageSelect>
+          {state.results.map((p, i) => <PageLink selected={page === i} onClick={() => setPage(i)}>{i+1}</PageLink>)}
+        </PageSelect>
+      </TopSection>
       <QueryResultsSection
         queryError={state.queryError}
         columnDefs={state.columnDefinitions}
-        page={state.results.length > 0 ? state.results[0] : { rows: [] }}
+        page={state.results.length > 0 ? state.results[page] : { rows: [] }}
       />
     </AppContainer>
   );
@@ -380,6 +354,7 @@ export default App;
 
 const AppContainer = styled.div`
   overflow: scroll;
+  max-height: 100vh;
 `;
 
 const AppLogo = styled.img<{ idle: boolean }>`
@@ -407,10 +382,19 @@ const Header = styled.header`
   color: white;
 `;
 
-const QueryInputContainer = styled.div`
+const TOP_HEIGHT = "80px";
+
+const TopSection = styled.div`
   position: sticky;
+  top: 0;
   left: 0;
-  
+  display: flex;
+  flex-direction: column;
+  height: ${TOP_HEIGHT};
+  background-color: #fff;
+`;
+
+const QueryInputContainer = styled.div`
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -430,6 +414,31 @@ const QueryInput = styled.input`
   font-size: 11pt;
   border: 1px solid black;
   width: 60%;
+`;
+
+const ResultCounter = styled.span`
+  font-size: 12pt;
+  margin-left: 50px;
+`;
+
+const PageSelect = styled.div`
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+`;
+
+const PageLink = styled.button<{ selected: boolean }>`
+  background: transparent;
+  color: #668;
+  border: 0;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 11pt;
+  font-weight: bold;
+  ${({ selected }) =>
+    selected ? "text-decoration: none; font-size: 12pt" : "text-decoration: underline;"
+  };
 `;
 
 const ErrorContainer = styled.div`
@@ -493,6 +502,8 @@ const Cell = styled.td`
 `;
 
 const HeadCell = styled.th`
+  position: sticky;
+  top: ${TOP_HEIGHT};
   margin: 0;
   padding: 5px;
   border: 0.5px solid #ccc;
