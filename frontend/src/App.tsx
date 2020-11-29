@@ -52,9 +52,14 @@ enum QueryStatus {
   InProgress
 }
 
+interface ResultPage {
+  rows: ResultRow[];
+}
+
 interface State {
   columnDefinitions: ColumnDefinition[];
-  results: ResultRow[];
+  results: ResultPage[];
+  resultsNum: number | null;
   queryError: string | null;
   queryStatus: QueryStatus;
 }
@@ -62,6 +67,7 @@ interface State {
 const initialState: State = {
   columnDefinitions: [],
   results: [],
+  resultsNum: null,
   queryError: null,
   queryStatus: QueryStatus.Done,
 };
@@ -140,8 +146,11 @@ function handleMessage(state: State, msg: QueryMessage): State {
     }
     case "QueryMessageRows": {
       const rowsMessage: QueryMessageRows = msg;
-      const rows = rowsMessage.rows;
-      return { ...state, results: state.results.concat(rows) };
+      const page = {
+        rows: rowsMessage.rows
+      };
+      const resultsNum = (state.resultsNum || 0) + page.rows.length;
+      return { ...state, results: state.results.concat([page]), resultsNum };
     }
     case "QueryMessageFinished": {
       return { ...state, queryStatus: QueryStatus.Done };
@@ -153,10 +162,10 @@ function handleMessage(state: State, msg: QueryMessage): State {
 const reducer = (state: State, action: Action) => {
   switch (action.type) {
     case ActionType.ON_CLEAR_RESULTS: {
-      return { ...state, results: [] };
+      return { ...state, results: [], resultsNum: null };
     }
     case ActionType.ON_START_QUERY: {
-      return { ...state, queryStatus: QueryStatus.InProgress };
+      return { ...state, queryStatus: QueryStatus.InProgress, resultsNum: 0 };
     }
     case ActionType.ON_MESSAGE: {
       const { message } = action;
@@ -218,7 +227,7 @@ function renderColumnValue(column: ColumnValue, index: number) {
     return <TextValue>{column.Text.v}</TextValue>;
   } else if (column.Blob !== undefined) {
     const s = atob(column.Blob.v);
-    if (false)
+    if (true)
       return <LargeValue>{s}</LargeValue>;
     else {
       const json = JSON.parse(s);
@@ -267,11 +276,11 @@ function renderRow(row: ResultRow, rowIndex: number) {
 interface QueryResultsSectionProps {
   queryError: string | null;
   columnDefs: ColumnDefinition[];
-  rows: ResultRow[];
+  page: ResultPage;
 }
 
 function QueryResultsSectionImpl(props: QueryResultsSectionProps) {
-  const { queryError, columnDefs, rows } = props;
+  const { queryError, columnDefs, page } = props;
   if (queryError !== null) {
     return (
     <ErrorContainer>
@@ -289,7 +298,7 @@ function QueryResultsSectionImpl(props: QueryResultsSectionProps) {
           </Row>
         </thead>
         <tbody>
-          {rows.map((row, i) => renderRow(row, i))}
+          {page.rows.map((row, i) => renderRow(row, i))}
         </tbody>
       </ResultsTable>
     );
@@ -348,7 +357,6 @@ function App() {
     <AppContainer>
       <Header>
         <AppLogo src={casLogo} alt="cassandra-tool-logo" idle={logoIdle} />
-        <img src={casLogo} className="App-logo" alt="logo" />
         <h1>Cassandra Tool</h1>
       </Header>
       <QueryInputContainer>
@@ -357,18 +365,13 @@ function App() {
           onChange={ev => setQueryInput(ev.target.value)}
         />
         <Button onClick={() => doQuery()}>Execute</Button>
+        {state.resultsNum !== null && <span>{state.resultsNum} results</span>}
       </QueryInputContainer>
-      <section>
-        {/*<JsonSyntaxHighlight
-          value={'{\n "Kala": kukko,\n "other-object": {]\n}'}
-        />
-        <JsonSyntaxHighlight value={invalidJson} />*/}
-        <QueryResultsSection
-          queryError={state.queryError}
-          columnDefs={state.columnDefinitions}
-          rows={state.results}
-        />
-      </section>
+      <QueryResultsSection
+        queryError={state.queryError}
+        columnDefs={state.columnDefinitions}
+        page={state.results.length > 0 ? state.results[0] : { rows: [] }}
+      />
     </AppContainer>
   );
 }
