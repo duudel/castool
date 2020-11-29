@@ -52,7 +52,7 @@ class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Eff
           result <- CassandraSession.query(query)
             .map { case (columnDefs, rowsStream) =>
               val resultsStream = rowsStream
-                .groupedWithin(50, zio.duration.Duration.fromMillis(10))
+                .groupedWithin(100, zio.duration.Duration.fromMillis(100))
                 .map(rows => QueryMessageRows(rows.iterator.toSeq))
               ZStream(QueryMessageSuccess(columnDefs)) ++ resultsStream ++ ZStream(QueryMessageFinished)
             }
