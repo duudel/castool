@@ -23,7 +23,7 @@ import com.datastax.oss.driver.api.core.`type`.DataTypes
 import scala.collection.JavaConverters._
 
 import castool.configuration
-import castool.cassandra.{CassandraSession, ColumnValue, ResultRow, Metadata}
+import castool.cassandra.{CassandraSession, ColumnValue, ResultRow, Metadata, QueryResponse}
 import castool.util.{ZioWebSocket, ZPipe}
 
 class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Effect: ContextShift] extends Http4sDsl[F] {
@@ -50,11 +50,11 @@ class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Eff
         for {
           _ <- zio.console.putStrLn("Query: " + query)
           result <- CassandraSession.query(query)
-            .map { case (columnDefs, rowsStream) =>
+            .map { case QueryResponse(columnDefs, execInfo, rowsStream) =>
               val resultsStream = rowsStream
                 .groupedWithin(100, zio.duration.Duration.fromMillis(100))
                 .map(rows => QueryMessageRows(rows.iterator.toSeq))
-              ZStream(QueryMessageSuccess(columnDefs)) ++ resultsStream ++ ZStream(QueryMessageFinished)
+              ZStream(QueryMessageSuccess(columnDefs, execInfo)) ++ resultsStream ++ ZStream(QueryMessageFinished)
             }
             .catchSome {
               case ex: com.datastax.oss.driver.api.core.servererrors.InvalidQueryException =>

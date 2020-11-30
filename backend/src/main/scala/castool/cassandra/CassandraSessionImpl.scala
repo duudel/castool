@@ -38,7 +38,7 @@ private[cassandra] class CassandraSessionImpl(cqlSession: CqlSession) extends Ca
         .toSeq
       defs -> extractRows(rs)
     }*/
-    def query(q: String): zio.IO[Throwable,(Seq[ColumnDefinition], ZStream[Any,Throwable,ResultRow])] = asyncQuery(q)
+    def query(q: String): zio.IO[Throwable, QueryResponse] = asyncQuery(q)
 
     private def qstreamTask(rsTask: Task[cql.AsyncResultSet]): Task[ZStream[Any, Throwable, cql.Row]] = {
       rsTask.flatMap { rs =>
@@ -61,15 +61,18 @@ private[cassandra] class CassandraSessionImpl(cqlSession: CqlSession) extends Ca
       }
     }
 
-    def asyncQuery(q: String): Task[(Seq[ColumnDefinition], ZStream[Any, Throwable, ResultRow])] = {
+    def asyncQuery(q: String): Task[QueryResponse] = {
       val res = cqlSession.executeAsync(q)
       val rsTask = ZIO.fromCompletionStage(res)
-      val columnDefsTask = rsTask.map(_.getColumnDefinitions().asScala.map(ColumnDefinition.fromDriverDef(_)).toSeq)
       for {
-        cd <- columnDefsTask
+        rs <- rsTask
         qs <- qstreamTask(rsTask)
-        res = qs.zipWithIndex.map { case (row, index) => convertRow(index, row) }
-      } yield (cd, res)
+      } yield {
+        val stream = qs.zipWithIndex.map { case (row, index) => convertRow(index, row) }
+        val columnDefs = rs.getColumnDefinitions().asScala.map(ColumnDefinition.fromDriverDef(_)).toSeq
+        val execInfo = ExecutionInfo.fromDriver(rs.getExecutionInfo())
+        QueryResponse(columnDefs, execInfo, stream)
+      }
     }
 
     def metadata: IO[Throwable, Metadata] = IO {

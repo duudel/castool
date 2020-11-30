@@ -17,8 +17,7 @@ object CassandraSession {
   type CassandraSession = Has[Service]
 
   trait Service {
-    def query(q: String): IO[Throwable, (Seq[ColumnDefinition], ZStream[Any, Throwable, ResultRow])]
-    //def query(q: String): IO[Throwable, cql.ResultSet]
+    def query(q: String): IO[Throwable, QueryResponse]
     def metadata: IO[Throwable, Metadata]
   }
 
@@ -44,8 +43,7 @@ object CassandraSession {
     }
   }
 
-  def query(q: String): RIO[CassandraSession, (Seq[ColumnDefinition], ZStream[Any, Throwable, ResultRow])] = ZIO.accessM(_.get.query(q))
-  //def query(q: String): RIO[CassandraSession, cql.ResultSet] = ZIO.accessM(_.get.query(q))
+  def query(q: String): RIO[CassandraSession, QueryResponse] = ZIO.accessM(_.get.query(q))
   def metadata: RIO[CassandraSession, Metadata] = ZIO.accessM(_.get.metadata)
 }
 

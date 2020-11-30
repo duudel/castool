@@ -1,0 +1,36 @@
+<!-- https://www.playframework.com/documentation/latest/SettingsLogger -->
+<configuration>
+
+  <!--conversionRule conversionWord="coloredLevel" converterClass="play.api.libs.logback.ColoredLevel" /-->
+
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%green(%date{yyyy-MM-dd HH:mm:ss.SSS}) %highlight([%level]) %cyan(%logger{20}) - %message%n%xException</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="ASYNCSTDOUT" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="STDOUT" />
+  </appender>
+
+  <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    <file>${application.home:-.}/logs/application.log</file>
+    <encoder>
+      <pattern>%date [%level] %logger - %message%n%xException</pattern>
+    </encoder>
+  </appender>
+
+  <appender name="ASYNCFILE" class="ch.qos.logback.classic.AsyncAppender">
+    <appender-ref ref="FILE"/>
+  </appender>
+
+  <logger name="castool" level="DEBUG"/>
+  <logger name="com.datastax.oss" level="INFO"/>
+  <logger name="io.netty" level="INFO"/>
+
+  <root level="TRACE">
+    <appender-ref ref="ASYNCSTDOUT"/>
+  </root>
+
+</configuration>
+
