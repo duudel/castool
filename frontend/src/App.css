@@ -8,10 +8,10 @@
 
 @keyframes App-logo-blink {
   0% { transform: scaleY(0.1); }
-  0.75% { transform: scaleY(1.0); }
+  0.25% { transform: scaleY(1.0); }
   40.0% { transform: scaleY(1.0); }
-  40.75% { transform: scaleY(0.1); }
-  41.00% { transform: scaleY(1.0); }
+  41.05% { transform: scaleY(0.1); }
+  41.25% { transform: scaleY(1.0); }
   60.00% { transform: scaleY(1.0); }
   60.75% { transform: scaleY(0.1); }
   61.00% { transform: scaleY(1.0); }

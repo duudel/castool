@@ -1,31 +1,71 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+const createWebsocket = (url: string, setReconnectionTimer: () => void, setStatus: (status: string) => void, dispatch: (msg: MessageEvent<any>) => void) => {
+  console.log("Create new websocket");
+  const ws = new WebSocket(url);
+
+  ws.addEventListener("open", () => {
+    setStatus("OPEN");
+  });
+
+  ws.addEventListener("close", () => {
+    setStatus("CLOSED");
+    setReconnectionTimer();
+  });
+
+  ws.addEventListener('message', dispatch);
+  return ws;
+}
+
 export const useWebsocket = (
   url: string,
-  //receive: (event: MessageEvent<any>) => void
   dispatch: (msg: MessageEvent<any>) => void
 ): [(msg: any) => void] => {
-  //const [reconnection, setReconnection] = useState(0);
   const ws = useRef<WebSocket | null>(null);
   const pending = useRef<any[]>([]);
+  const [status, setStatus] = useState("CLOSED");
 
   const send = useCallback((msg: any): void => {
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(msg);
     } else {
       pending.current.push(msg);
-      //setReconnection(reconnection + 1);
     }
   }, []);
 
+  const setReconnectionTimer = () => {
+    setStatus("RECONNECTING");
+    setTimeout(() => {
+      if (ws.current === null || ws.current.readyState === WebSocket.CLOSED) {
+        console.log("reconnect");
+        //ws.current = new WebSocket(url);
+        ws.current = createWebsocket(url, setReconnectionTimer, setStatus, dispatch);
+      } else if (ws.current.readyState !== WebSocket.OPEN) {
+        setReconnectionTimer();
+      } else {
+        setStatus("CONNECTED");
+      }
+    }, 1000);
+  };
+
   useEffect(() => {
     if (ws.current === null || ws.current.readyState === WebSocket.CLOSED) {
-      console.log("Create new websocket");
-      ws.current = new WebSocket(url);
+      //console.log("Create new websocket");
+      //ws.current = new WebSocket(url);
+      ws.current = createWebsocket(url, setReconnectionTimer, setStatus, dispatch);
     }
+
+    //ws.current.addEventListener("open", () => {
+    //  setStatus("OPEN");
+    //});
+
+    //ws.current.addEventListener("close", () => {
+    //  setReconnectionTimer();
+    //});
+
     return () => {
       if (ws.current && ws.current.readyState !== WebSocket.CLOSED) {
-      console.log("Closing websocket");
+        console.log("Closing websocket");
         ws.current.close();
         ws.current = null;
       }

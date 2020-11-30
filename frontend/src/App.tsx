@@ -1,8 +1,6 @@
 import React from "react";
 import styled from 'styled-components';
-import { Dispatch, useCallback, useEffect, useReducer, useRef, useState } from "react";
-//import casLogo from "./279px-Cassandra_logo.svg.png";
-//import casLogo from "./Apache-cassandra-icon.png";
+import { Dispatch, useCallback, useEffect, useReducer, useState } from "react";
 import casLogo from "./CasTool-2-icon.png";
 import "./App.css";
 
@@ -273,33 +271,6 @@ function QueryResultsSectionImpl(props: QueryResultsSectionProps) {
 
 const QueryResultsSection = React.memo(QueryResultsSectionImpl);
 
-/*
-function renderQueryResults(state: State) {
-  const { columnDefinitions, results, queryError } = state;
-  if (queryError !== null) {
-    return (
-    <ErrorContainer>
-      <ErrorCaption>Error: </ErrorCaption>
-      <ErrorContent>{queryError}</ErrorContent>
-    </ErrorContainer>
-    );
-  } else {
-    return (
-      <ResultsTable>
-        <thead>
-          <Row key="column-defs">
-            <HeadCell />
-            {columnDefinitions.map((def, i) => renderColumnDef(def, i))}
-          </Row>
-        </thead>
-        <tbody>
-          {results.map((row, i) => renderRow(row, i))}
-        </tbody>
-      </ResultsTable>
-    );
-  }
-}*/
-
 function App() {
   const [queryInput, setQueryInput] = useState("SELECT * FROM calloff.messages;");
 
@@ -338,7 +309,7 @@ function App() {
           <ResultCounter>{state.resultsNum !== null && <span>{state.resultsNum} results</span>}</ResultCounter>
         </QueryInputContainer>
         <PageSelect>
-          {state.results.map((p, i) => <PageLink selected={page === i} onClick={() => setPage(i)}>{i+1}</PageLink>)}
+          {state.results.map((p, i) => <PageLink key={"page-" + i} selected={page === i} onClick={() => setPage(i)}>{i+1}</PageLink>)}
         </PageSelect>
       </TopSection>
       <QueryResultsSection
