@@ -34,7 +34,13 @@ function App() {
       </Header>
       <SplitContainer ref={splitContainerRef}>
         <QuerySection forwardRef={qref} dispatch={dispatch} sendQuery={sendQuery} state={state} />
-        <Split A={qref} B={tref} container={splitContainerRef} />
+        <Split
+          A={qref}
+          B={tref}
+          container={splitContainerRef}
+          minPixelsA={150}
+          minB={0.3}
+        />
         <TransformerSection ref={tref}>
           <div>Here is the transformer</div>
         </TransformerSection>

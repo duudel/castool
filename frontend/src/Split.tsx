@@ -20,7 +20,9 @@ function processProps(props: SplitProps) {
   const bounds = container.current ? container.current.getBoundingClientRect() : null;
   const getMinimumDimension = (ratio: number | undefined, pixels: number | undefined): number => {
     if (pixels !== undefined && bounds && bounds.height >= 1) {
-      return clamp(0.0, pixels / bounds.height, 1.0);
+      const result = clamp(0.0, pixels / bounds.height, 1.0);
+      console.log("Min pixels", pixels, " -> ", result);
+      return result;
     } else if (ratio !== undefined) {
       return clamp(0.0, ratio, 1.0);
     } else {
@@ -51,22 +53,24 @@ export default function Split(props: SplitProps) {
     resizing.current = true;
   }, []);
 
-  const calculateNewSplit = (clientY: number) => {
+  const calculateNewSplit = useCallback((clientY: number) => {
     if (!container.current) return split;
     const bounds = container.current.getBoundingClientRect();
-    // TODO: div by zero
-    const newSplit = (clientY - bounds.y) / bounds.height;
-    const maxSplit = 1.0 - minB;
-    const minSplit = 0.0 + minA;
-    return clamp(minSplit, newSplit, maxSplit);
-  };
+    if (bounds.height >= 1) {
+      const newSplit = (clientY - bounds.y) / bounds.height;
+      const maxSplit = 1.0 - minB;
+      const minSplit = 0.0 + minA;
+      return clamp(minSplit, newSplit, maxSplit);
+    }
+    return split;
+  }, [minA, minB]);
 
   const endResize = useCallback((ev: MouseEvent) => {
     if (resizing.current) {
       setSplit(calculateNewSplit(ev.clientY));
       resizing.current = false;
     }
-  }, []);
+  }, [calculateNewSplit]);
 
   const setReprPosition = (posPixels: number) => {
     if (ref.current && container.current) {
@@ -84,19 +88,27 @@ export default function Split(props: SplitProps) {
       const bounds = container.current.getBoundingClientRect();
       setReprPosition(newSplit * bounds.height);
     }
-  }, []);
+  }, [calculateNewSplit]);
 
   const setPositions = (split: number) => {
     if (!container.current || !ref.current) return;
     const bounds = container.current.getBoundingClientRect();
     console.log("Bounds:", bounds);
 
-    const heightA = bounds.height * split;
-    const heightB = bounds.height * (1.0 - split);
+    const reprHeight = ref.current.clientHeight;
+    const halfRepr = reprHeight / 2;
 
-    setReprPosition(heightA);
-    if (A.current) A.current.style.height = heightA + "px";
-    if (B.current) B.current.style.height = heightB + "px";
+    const heightA = (bounds.height - halfRepr) * split;
+    const heightB = (bounds.height - halfRepr) * (1.0 - split);
+
+    setReprPosition(bounds.height * split);
+    if (A.current) {
+      A.current.style.height = heightA + "px";
+    }
+    if (B.current) {
+      B.current.style.marginTop = reprHeight + "px";
+      B.current.style.height = heightB + "px";
+    }
   };
 
   useEffect(() => {
