@@ -50,32 +50,3 @@ function JsonSyntaxHighlightImpl(props: JsonSyntaxHighlightProps) {
 
 export const JsonSyntaxHighlight = React.memo(JsonSyntaxHighlightImpl);
 
-/*
-export class JsonSyntaxHighlight extends React.Component<JsonSyntaxHighlightProps> {
-    render() {
-        const { value, nopre = false } = this.props;
-        const parser = createParser(value);
-        const results = parseJson(parser);
-        const lineLimitReached = parser.line >= parser.lineLimit;
-        //console.log("parser:", parser);
-        if (nopre) {
-            return <div>
-                {
-                    results.map(([s, cls], index) => {
-                        return <span className={cls} key={"sh" + index}>{s}</span>;
-                    })
-                }
-                {lineLimitReached && "..."}
-            </div>
-        }
-        return <pre>
-            {
-                results.map(([s, cls], index) => {
-                    return <span className={cls} key={"sh" + index}>{s}</span>;
-                })
-            }
-            {lineLimitReached && "..."}
-        </pre>
-    }
-}
-*/

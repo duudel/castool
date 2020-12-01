@@ -69,3 +69,7 @@ export interface ResultRow {
   columnValues: ColumnValue[];
 }
 
+export interface ResultPage {
+  rows: ResultRow[];
+}
+

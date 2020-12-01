@@ -177,7 +177,7 @@ const parseJsonImpl = (parser: Parser) => {
   if (!inputLeft(parser)) return;
 
   switch (current(parser)) {
-    case '{': {
+    case '{':
       accept(parser, '{', ['{', "json-brace"]);
       eatWhitespace(parser);
       if (accept(parser, '}', ['}', "json-brace"])) {
@@ -227,8 +227,8 @@ const parseJsonImpl = (parser: Parser) => {
           }
         }
       }
-    } break;
-    case '[': {
+      break;
+    case '[':
       accept(parser, '[', ['[', "json-bracket"]);
       eatWhitespace(parser);
       if (lineLimitReached(parser)) return;
@@ -249,8 +249,8 @@ const parseJsonImpl = (parser: Parser) => {
       if (!accept(parser, ']', [']', "json-bracket"])) {
         syntaxError(parser, "Expected array end ']'");
       }
-    } break;
-    case '"': {
+      break;
+    case '"':
       // TODO: parse escape sequences, at least for \".
       const strStart = parser.pos;
       parser.pos++;
@@ -268,17 +268,17 @@ const parseJsonImpl = (parser: Parser) => {
       }
 
       addSubstring(parser, strStart, "json-str");
-    } break;
-    case 'n': {
+      break;
+    case 'n':
       accept(parser, "null", ["null", "json-null"]);
-    } break;
-    case 't': {
+      break;
+    case 't':
       accept(parser, "true", ["true", "json-bool"]);
-    } break;
-    case 'f': {
+      break;
+    case 'f':
       accept(parser, "false", ["false", "json-bool"]);
-    } break;
-    case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
+      break;
+    case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
       const numStart = parser.pos;
       accept(parser, '+') || accept(parser, '-');
       acceptWhile(parser, isNumeric);
@@ -291,7 +291,7 @@ const parseJsonImpl = (parser: Parser) => {
       }
 
       addSubstring(parser, numStart, "json-num");
-    } break;
+      break;
     default:
       syntaxError(parser, "Invalid character '" + current(parser) + "'");
       eatWhitespace(parser);
