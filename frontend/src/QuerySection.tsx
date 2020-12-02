@@ -7,6 +7,8 @@ import { Action, ActionType, State } from './reducer';
 
 import { JsonSyntaxHighlight } from './JsonSyntaxHighlight';
 
+import useSessionStorage from './UseSessionStorageHook';
+
 function columnValueToString(column: ColumnValue) {
   if (column.Null !== undefined) {
     return "NULL";
@@ -147,32 +149,6 @@ interface QuerySectionProps {
   forwardRef: { current: HTMLDivElement | null };
 }
 
-function useSessionStorage<T>(key: string, initialValue: T): [T, (value: T) => void] {
-  const [value, setValue] = useState(() => {
-    try {
-      const storedValue = window.sessionStorage.getItem(key);
-      if (storedValue === null) {
-        sessionStorage.setItem(key, JSON.stringify(initialValue));
-        return initialValue;
-      } else {
-        return JSON.parse(storedValue);
-      }
-    } catch {
-      return initialValue;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      const serialized = JSON.stringify(value);
-      window.sessionStorage.setItem(key, serialized);
-    } catch {
-    }
-  });
-
-  return [value, setValue];
-}
-
 function QuerySection(props: QuerySectionProps) {
   const { forwardRef, dispatch, sendQuery, state: { columnDefinitions, resultsNum, results, page, queryError } } = props;
   const [queryInput, setQueryInput] = useSessionStorage("query.input", "SELECT * FROM calloff.messages;");
@@ -215,8 +191,6 @@ export default QuerySection;
 
 const Container = styled.div`
   overflow: scroll;
-  display: flex;
-  flex-direction: column;
 `;
 
 const TOP_HEIGHT = "80px";

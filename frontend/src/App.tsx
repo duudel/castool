@@ -7,7 +7,7 @@ import "./App.css";
 import { useWebsocket } from './UseWebsocketHook';
 import Split from './Split';
 import QuerySection from './QuerySection';
-import { Transformer } from './TransformerSection';
+import { TransformerSection } from './TransformerSection';
 
 import { ActionType, reducer, initialState, QueryStatus } from './reducer';
 
@@ -41,9 +41,7 @@ function App() {
           minPixelsA={150}
           minB={0.3}
         />
-        <TransformerSection ref={tref}>
-          <div>Here is the transformer</div>
-        </TransformerSection>
+        <TransformerSection forwardRef={tref} />
       </SplitContainer>
     </AppContainer>
   );
@@ -90,11 +88,5 @@ const ConnectionInfo = styled.div`
 
 const SplitContainer = styled.div`
   height: 88vh;
-`;
-
-const TransformerSection = styled.div`
-  overflow: scroll;
-  display: flex;
-  flex-direction: column;
 `;
 

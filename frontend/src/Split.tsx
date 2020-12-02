@@ -21,7 +21,6 @@ function processProps(props: SplitProps) {
   const getMinimumDimension = (ratio: number | undefined, pixels: number | undefined): number => {
     if (pixels !== undefined && bounds && bounds.height >= 1) {
       const result = clamp(0.0, pixels / bounds.height, 1.0);
-      console.log("Min pixels", pixels, " -> ", result);
       return result;
     } else if (ratio !== undefined) {
       return clamp(0.0, ratio, 1.0);
@@ -125,17 +124,21 @@ export default function Split(props: SplitProps) {
   });
 
   return (
-    <SplitRepr ref={ref}>---</SplitRepr>
+    <SplitRepr ref={ref}>- - -</SplitRepr>
   );
 }
 
 const SplitRepr = styled.div`
   position: absolute;
   z-index: 1000;
-  text-align: center;
-  border: 1px solid;
   height: 16px;
   width: 100%;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-top: 1px solid #888;
+  border-bottom: 1px solid #888;
 
   cursor: ns-resize;
   background: #eee;
