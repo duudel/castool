@@ -41,7 +41,7 @@ function App() {
           minPixelsA={150}
           minB={0.3}
         />
-        <TransformerSection forwardRef={tref} />
+        <TransformerSection forwardRef={tref} state={state} dispatch={dispatch} />
       </SplitContainer>
     </AppContainer>
   );

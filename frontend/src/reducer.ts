@@ -5,6 +5,10 @@ export enum QueryStatus {
   InProgress
 }
 
+interface TxResultPage {
+  results: any[];
+}
+
 export interface State {
   columnDefinitions: ColumnDefinition[];
   results: ResultPage[];
@@ -12,6 +16,11 @@ export interface State {
   queryError: string | null;
   queryStatus: QueryStatus;
   page: number;
+
+  tx: {
+    pages: TxResultPage[];
+    page: number;
+  };
 }
 
 export const initialState: State = {
@@ -21,6 +30,11 @@ export const initialState: State = {
   queryError: null,
   queryStatus: QueryStatus.Done,
   page: 0,
+
+  tx: {
+    pages: [],
+    page: 0,
+  }
 };
 
 export enum ActionType {
@@ -28,6 +42,9 @@ export enum ActionType {
   ON_START_QUERY,
   ON_MESSAGE,
   ON_SET_PAGE,
+
+  ON_TX_RESULTS_CLEAR,
+  ON_TX_RESULTS,
 };
 
 export interface OnClearResultsAction {
@@ -48,7 +65,19 @@ export interface OnSetPageAction {
   page: number;
 }
 
-export type Action = OnClearResultsAction | OnStartQueryAction | OnMessageAction | OnSetPageAction;
+export interface OnTxResultsClear {
+  type: ActionType.ON_TX_RESULTS_CLEAR;
+}
+
+export interface OnTxResults {
+  type: ActionType.ON_TX_RESULTS;
+  results: any[];
+}
+
+export type Action = OnClearResultsAction | OnStartQueryAction | OnMessageAction | OnSetPageAction | OnTxResultsClear | OnTxResults;
+
+export const clearTxResults: Action = { type: ActionType.ON_TX_RESULTS_CLEAR };
+export const addTxResults = (results: any[]): Action => ({ type: ActionType.ON_TX_RESULTS, results });
 
 interface QueryMessageSuccess {
   type: "QueryMessageSuccess";
@@ -133,6 +162,36 @@ export const reducer = (state: State, action: Action) => {
     case ActionType.ON_SET_PAGE: {
       const { page } = action;
       return { ...state, page };
+    }
+    case ActionType.ON_TX_RESULTS_CLEAR: {
+      return { ...state, tx: { pages: [], page: 0 } };
+    }
+    case ActionType.ON_TX_RESULTS: {
+      const { results } = action;
+      const pages = state.tx.pages;
+      if (pages.length === 0) {
+        pages.push({ results: [] });
+      }
+      const page = pages[0];
+      page.results = page.results.concat(results);
+      //const PAGE_SIZE = 50;
+      //let pages = state.tx.pages;
+      //if (pages.length === 0) {
+      //  pages = [{ results: [] }];
+      //}
+      //while (results.length > 0) {
+      //  const i = pages.length - 1;
+      //  let p = pages[i];
+      //  if (PAGE_SIZE - p.results.length <= 0) {
+      //    pages = pages.concat([{ results: [] }]);
+      //    p = pages[i + 1];
+      //  }
+      //  const max = PAGE_SIZE - p.results.length;
+      //  const howMany = results.length > max ? max : results.length;
+      //  p.results.concat(results.splice(0, howMany))
+      //}
+      console.log("pages", pages);
+      return { ...state, tx: { pages, page: 0 } };
     }
   }
   return state;
