@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dispatch } from 'react';
+import { Dispatch, useMemo } from 'react';
 import styled from 'styled-components';
 
 import * as rxjs from 'rxjs';
@@ -9,6 +9,13 @@ import { Action, State, clearTxResults, addTxResults } from './reducer';
 
 import useSessionStorage from './UseSessionStorageHook';
 import {ResultRow} from './types';
+
+import * as rql from './rql/rql';
+
+const example = "Rows | where persistence_id container 'DHN'";
+const parsed = rql.parse(example);
+
+console.log(parsed);
 
 function transform(row: any): any | undefined {
   if (row.event && typeof row.event === "string") {
@@ -103,10 +110,14 @@ interface TransformerSectionProps {
 
 export function TransformerSection(props: TransformerSectionProps) {
   const { forwardRef, state, dispatch } = props;
-  //const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
-  //<ScriptInput value={script} onChange={ev => setScript(ev.target.value)} />
+  const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
+  const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
   return (
     <Container ref={forwardRef}>
+      <ScriptContainer>
+        <ScriptInput rows={20} cols={120} value={script} onChange={ev => setScript(ev.target.value)} />
+        <ParsedContainer>{parsed}</ParsedContainer>
+      </ScriptContainer>
       <button onClick={() => doTransform(state, dispatch)}> Transform </button>
       {state.tx.pages.length > 0 && state.tx.pages[0].results.map((item, i) => {
         return <div>{i} - {JSON.stringify(item)}</div>;
@@ -119,5 +130,18 @@ const Container = styled.div`
   overflow: scroll;
 `;
 
-const ScriptInput = styled.textarea``;
+const ScriptContainer = styled.div`
+  display: flex;
+  flex-direction: row;
+`;
+
+const ScriptInput = styled.textarea`
+  padding: 8px;
+  font-size: 10pt;
+  font-family: "Verdana";
+`;
+
+const ParsedContainer = styled.pre`
+  padding: 10px;
+`;
 
