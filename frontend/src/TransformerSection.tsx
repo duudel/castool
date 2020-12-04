@@ -112,6 +112,7 @@ export function TransformerSection(props: TransformerSectionProps) {
   const { forwardRef, state, dispatch } = props;
   const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
   const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
+  //const parsed = JSON.stringify(rql.parse(script), null, 2);
   return (
     <Container ref={forwardRef}>
       <ScriptContainer>
