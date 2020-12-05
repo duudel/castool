@@ -12,11 +12,6 @@ import {ColumnValueDataType, ResultRow} from './types';
 
 import * as rql from './rql/rql';
 
-const example = "Rows | where persistence_id container 'DHN'";
-const parsed = rql.parse(example);
-
-console.log(parsed);
-
 function transform(row: any): any | undefined {
   if (row.event && typeof row.event === "string") {
     try {
@@ -29,31 +24,6 @@ function transform(row: any): any | undefined {
   }
   return;
 }
-
-function createTransformStream(rows$: rxjs.Observable<any>) {
-  return rows$
-    .pipe(
-      rxop.flatMap(row => {
-        const res = transform(row);
-        if (res === undefined) {
-          return rxjs.EMPTY;
-        } else {
-          return rxjs.of(res);
-        }
-      }),
-      rxop.bufferTime(50)
-    );
-}
-
-//async function executeTransform(rowIterator: () => any, produce: (result: any) => void) {
-//  while (true) {
-//    const item = rowIterator();
-//    if (item === null) break;
-//
-//    const result = transform(item);
-//    produce(result);
-//  }
-//}
 
 function doTransform(state: State, dispatch: Dispatch<Action>) {
   dispatch(clearTxResults);
@@ -139,17 +109,16 @@ interface TransformerSectionProps {
 export function TransformerSection(props: TransformerSectionProps) {
   const { forwardRef, state, dispatch } = props;
   const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
-  const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
+  //const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
   const [compileError, compileResult] = useMemo(() => {
     const ast = rql.parse(script);
     if (typeof ast === "string") return [ast, undefined];
     const result = rql.compile(ast);
     return [undefined, result];
-  },
-    [script, state]
-  );
+  }, [script]);
 
   const execute = useCallback(() => {
+    dispatch(clearTxResults);
     if (compileResult === undefined) return;
     const convertDataType = (dt: ColumnValueDataType): rql.DataType => {
       switch (dt) {
@@ -176,9 +145,12 @@ export function TransformerSection(props: TransformerSectionProps) {
     console.log("Compilation result:", result);
     if (result.success) {
       result.result.rows
+        .pipe(
+          rxop.bufferTime(100)
+        )
         .subscribe(results => {
-          console.log("Tx results", results);
-          dispatch(addTxResults([results]));
+          //console.log("Tx results", results);
+          dispatch(addTxResults(results));
         });
     }
   }, [compileResult, state]);
@@ -193,6 +165,7 @@ export function TransformerSection(props: TransformerSectionProps) {
       </ScriptContainer>
       <button disabled={compileError !== undefined} onClick={() => execute()}>Execute</button>
       {compileError && <span>{compileError}</span>}
+      {state.tx.results.length} results
       {resultsOnPage.map((item, i) => {
         return <div>{i} - {JSON.stringify(item)}</div>;
       })}

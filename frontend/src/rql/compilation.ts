@@ -260,6 +260,8 @@ function compileExtend(source: TableDef, op: AstExtend): CompilationResult {
   const exprResult = compileExpr(source, op.expr);
   if (!exprResult.success) return (env: Env) => failure(exprResult.error);
   const name = op.name.value;
+  const columns = source.columns.concat([[name, exprResult.dataType]]);
+  console.log("Columns after extend:", columns);
   return (env) => {
     const rows = source.rows.pipe(
       rxop.map(row => {
@@ -268,7 +270,6 @@ function compileExtend(source: TableDef, op: AstExtend): CompilationResult {
         return mapped;
       })
     );
-    const columns = source.columns.concat([name, exprResult.dataType]);
     return success({ columns, rows });
   };
 }

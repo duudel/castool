@@ -87,7 +87,7 @@ export default function Split(props: SplitProps) {
       const bounds = container.current.getBoundingClientRect();
       setReprPosition(newSplit * bounds.height);
     }
-  }, [calculateNewSplit]);
+  }, [calculateNewSplit, setReprPosition, container]);
 
   const setPositions = useCallback((split: number) => {
     if (!container.current || !ref.current) return;
@@ -108,7 +108,7 @@ export default function Split(props: SplitProps) {
       B.current.style.marginTop = reprHeight + "px";
       B.current.style.height = heightB + "px";
     }
-  }, [setReprPosition]);
+  }, [setReprPosition, A, B]);
 
   useEffect(() => {
     const refCurrent = ref.current;
@@ -121,7 +121,7 @@ export default function Split(props: SplitProps) {
       window.removeEventListener("mouseup", endResize);
       window.removeEventListener("mousemove", whileResize);
     };
-  });
+  }, [setPositions, startResize, endResize, whileResize, split]);
 
   return (
     <SplitRepr ref={ref}>- - -</SplitRepr>
