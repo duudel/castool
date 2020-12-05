@@ -43,17 +43,24 @@ export type makeAdt<T extends Record<string, {}>> = {
 export type Ast = makeAdt<{
   table: { name: Token },
   cont: { source: Ast, op: Ast }
-  where: { expr: Ast },
+  where: { expr: AstExpr },
   project: { names: Token[] },
-  extend: { name: Token, expr: Ast },
+  extend: { name: Token, expr: AstExpr },
   
   column: { name: Token },
   stringLit: { value: Token },
   numberLit: { value: Token },
   dateLit: { value: Token },
-  unaryOp: { op: UnaryOperator, expr: Ast },
-  binaryOp: { op: BinaryOperator, exprA: Ast, exprB: Ast },
+  unaryOp: { op: UnaryOperator, expr: AstExpr },
+  binaryOp: { op: BinaryOperator, exprA: AstExpr, exprB: AstExpr },
 }>;
+
+export type AstTable = Ast & { _type: "table" };
+export type AstCont = Ast & { _type: "cont" };
+export type AstWhere = Ast & { _type: "where" };
+export type AstProject = Ast & { _type: "project" };
+export type AstExtend = Ast & { _type: "extend" };
+export type AstExpr = Ast & { _type: "column" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" };
 
 export interface Lexer {
   input: string;

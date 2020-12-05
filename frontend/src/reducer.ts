@@ -5,10 +5,6 @@ export enum QueryStatus {
   InProgress
 }
 
-interface TxResultPage {
-  results: any[];
-}
-
 export interface State {
   columnDefinitions: ColumnDefinition[];
   results: ResultPage[];
@@ -18,8 +14,9 @@ export interface State {
   page: number;
 
   tx: {
-    pages: TxResultPage[];
+    results: any[];
     page: number;
+    rowsPerPage: number;
   };
 }
 
@@ -32,8 +29,9 @@ export const initialState: State = {
   page: 0,
 
   tx: {
-    pages: [],
+    results: [],
     page: 0,
+    rowsPerPage: 20,
   }
 };
 
@@ -145,7 +143,7 @@ function handleMessage(state: State, msg: QueryMessage): State {
   return state;
 }
 
-export const reducer = (state: State, action: Action) => {
+export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case ActionType.ON_CLEAR_RESULTS: {
       return { ...state, results: [], resultsNum: null, queryError: null };
@@ -164,34 +162,13 @@ export const reducer = (state: State, action: Action) => {
       return { ...state, page };
     }
     case ActionType.ON_TX_RESULTS_CLEAR: {
-      return { ...state, tx: { pages: [], page: 0 } };
+      return { ...state, tx: { ...state.tx, results: [], page: 0 } };
     }
     case ActionType.ON_TX_RESULTS: {
       const { results } = action;
-      const pages = state.tx.pages;
-      if (pages.length === 0) {
-        pages.push({ results: [] });
-      }
-      const page = pages[0];
-      page.results = page.results.concat(results);
-      //const PAGE_SIZE = 50;
-      //let pages = state.tx.pages;
-      //if (pages.length === 0) {
-      //  pages = [{ results: [] }];
-      //}
-      //while (results.length > 0) {
-      //  const i = pages.length - 1;
-      //  let p = pages[i];
-      //  if (PAGE_SIZE - p.results.length <= 0) {
-      //    pages = pages.concat([{ results: [] }]);
-      //    p = pages[i + 1];
-      //  }
-      //  const max = PAGE_SIZE - p.results.length;
-      //  const howMany = results.length > max ? max : results.length;
-      //  p.results.concat(results.splice(0, howMany))
-      //}
-      console.log("pages", pages);
-      return { ...state, tx: { pages, page: 0 } };
+      const prevResults = state.tx.results;
+      const newResults = prevResults.concat(results);
+      return { ...state, tx: { ...state.tx, results: newResults } };
     }
   }
   return state;

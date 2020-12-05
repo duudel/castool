@@ -61,7 +61,7 @@ function renderColumnValue(column: ColumnValue, index: number) {
     return <TextValue>{column.Timestamp.v}</TextValue>;
   } else if (column.Blob !== undefined) {
     const s = atob(column.Blob.v);
-    if (true)
+    if (false)
       return <LargeValue>{s}</LargeValue>;
     else {
       const json = JSON.parse(s);

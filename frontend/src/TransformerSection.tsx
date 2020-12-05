@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useCallback} from 'react';
 import { Dispatch, useMemo } from 'react';
 import styled from 'styled-components';
 
@@ -8,7 +8,7 @@ import * as rxop from 'rxjs/operators';
 import { Action, State, clearTxResults, addTxResults } from './reducer';
 
 import useSessionStorage from './UseSessionStorageHook';
-import {ResultRow} from './types';
+import {ColumnValueDataType, ResultRow} from './types';
 
 import * as rql from './rql/rql';
 
@@ -102,6 +102,34 @@ function doTransform(state: State, dispatch: Dispatch<Action>) {
   }
 }
 
+function rowsObservable(state: State): rql.RowsObs {
+  function convertRow(row: ResultRow): any {
+    const result: { [index: string]: any } = { };
+    state.columnDefinitions.forEach((columnDef, i) => {
+      //console.log("Adding column", columnDef, "to", result, ";", row);
+      const columnValue = row.columnValues[i];
+      if (columnValue.Null !== undefined) {
+        result[columnDef.name] = null;
+      } else {
+        result[columnDef.name] = columnValue[columnDef.dataType].v;
+      }
+    });
+    return result;
+  }
+
+  const pages = state.results;
+  return new rxjs.Observable(subscriber => {
+    for (const pi in pages) {
+      const page = pages[pi];
+      for (const ri in page.rows) {
+        const row = page.rows[ri];
+        const rowObject = convertRow(row);
+        subscriber.next(rowObject);
+      }
+    }
+  });
+}
+
 interface TransformerSectionProps {
   forwardRef: { current: HTMLDivElement | null };
   state: State;
@@ -112,15 +140,60 @@ export function TransformerSection(props: TransformerSectionProps) {
   const { forwardRef, state, dispatch } = props;
   const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
   const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
-  //const parsed = JSON.stringify(rql.parse(script), null, 2);
+  const [compileError, compileResult] = useMemo(() => {
+    const ast = rql.parse(script);
+    if (typeof ast === "string") return [ast, undefined];
+    const result = rql.compile(ast);
+    return [undefined, result];
+  },
+    [script, state]
+  );
+
+  const execute = useCallback(() => {
+    if (compileResult === undefined) return;
+    const convertDataType = (dt: ColumnValueDataType): rql.DataType => {
+      switch (dt) {
+        case ColumnValueDataType.Bool: return "boolean";
+        case ColumnValueDataType.Integer: return "number";
+        case ColumnValueDataType.SmallInt: return "number";
+        case ColumnValueDataType.TinyInt: return "number";
+        default: return "string";
+      }
+    };
+    const rows = rowsObservable(state);
+    const env: rql.Env = {
+      tables: {
+        Rows: {
+          columns: state.columnDefinitions.map(cd => {
+            return [cd.name, convertDataType(cd.dataType)];
+          }),
+          rows
+        }
+      }
+    };
+    console.log("Env", env);
+    const result = compileResult(env);
+    console.log("Compilation result:", result);
+    if (result.success) {
+      result.result.rows
+        .subscribe(results => {
+          console.log("Tx results", results);
+          dispatch(addTxResults([results]));
+        });
+    }
+  }, [compileResult, state]);
+
+  const pageStart = state.tx.rowsPerPage * state.tx.page;
+  const resultsOnPage = state.tx.results.slice(pageStart, pageStart + state.tx.rowsPerPage);
   return (
     <Container ref={forwardRef}>
       <ScriptContainer>
-        <ScriptInput rows={20} cols={120} value={script} onChange={ev => setScript(ev.target.value)} />
-        <ParsedContainer>{parsed}</ParsedContainer>
+        <ScriptInput rows={10} cols={120} value={script} onChange={ev => setScript(ev.target.value)} />
+        {/*<ParsedContainer>{parsed}</ParsedContainer>*/}
       </ScriptContainer>
-      <button onClick={() => doTransform(state, dispatch)}> Transform </button>
-      {state.tx.pages.length > 0 && state.tx.pages[0].results.map((item, i) => {
+      <button disabled={compileError !== undefined} onClick={() => execute()}>Execute</button>
+      {compileError && <span>{compileError}</span>}
+      {resultsOnPage.map((item, i) => {
         return <div>{i} - {JSON.stringify(item)}</div>;
       })}
     </Container>
