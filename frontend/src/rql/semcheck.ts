@@ -231,10 +231,31 @@ function semCheckBinaryOp(ctx: SemCheckContext, source: TableDef, expr: AstExpr 
       if (dataTypeA !== "string" || dataTypeB !== "string") {
         return semFailure(ctx, expr, `Cannot use !contains with '${dataTypeA}' and '${dataTypeB}'`);
       } else {
-        const evaluate = evalBinarySafe<string, string, boolean>(evalA, evalB, (a, b) => {
-          console.log(`'${a}' !contains '${b}'`);
-          return !a.includes(b);
-        });
+        const evaluate = evalBinarySafe<string, string, boolean>(evalA, evalB, (a, b) => !a.includes(b));
+        return semSuccessExpr("boolean", evaluate);
+      }
+    case BinaryOperator.And:
+      if (dataTypeA !== "boolean" || dataTypeB !== "boolean") {
+        if (dataTypeA === "null" || dataTypeB === null) {
+          return semSuccessExpr("boolean", () => false);
+        }
+        return semFailure(ctx, expr, `And expects boolean operands, got '${dataTypeA}' and '${dataTypeB}'`);
+      } else {
+        const evaluate = evalBinarySafe<boolean, boolean, boolean>(evalA, evalB, (a, b) => a && b);
+        return semSuccessExpr("boolean", evaluate);
+      }
+    case BinaryOperator.Or:
+      if (dataTypeA !== "boolean" || dataTypeB !== "boolean") {
+        if (dataTypeA === "null" && dataTypeB === null) {
+          return semSuccessExpr("boolean", () => false);
+        } else if (dataTypeA === "boolean" && dataTypeB === "null") {
+          return semSuccessExpr("boolean", evalA);
+        } else if (dataTypeA === "null" && dataTypeB === "boolean") {
+          return semSuccessExpr("boolean", evalB);
+        }
+        return semFailure(ctx, expr, `And expects boolean operands, got '${dataTypeA}' and '${dataTypeB}'`);
+      } else {
+        const evaluate = evalBinarySafe<boolean, boolean, boolean>(evalA, evalB, (a, b) => a || b);
         return semSuccessExpr("boolean", evaluate);
       }
   }
@@ -253,8 +274,13 @@ function semCheckExpr(ctx: SemCheckContext, source: TableDef, expr: AstExpr): Se
       }
     }
     case "nullLit": {
-      const evaluate = (row: InputRow) => null;
-      return semSuccessExpr("null", evaluate);
+      return semSuccessExpr("null", () => null);
+    }
+    case "trueLit": {
+      return semSuccessExpr("boolean", () => true);
+    }
+    case "falseLit": {
+      return semSuccessExpr("boolean", () => false);
     }
     case "stringLit": {
       const evaluate = (row: InputRow) => expr.value.value;

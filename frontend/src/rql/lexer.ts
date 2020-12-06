@@ -6,6 +6,8 @@ export enum TokenKind {
   NumberLit = "NumberLit",
   DateLit = "DateLit",
   NullLit = "Null",
+  TrueLit = "True",
+  FalseLit = "False",
   // special
   Bar = "|",
   LParen = "(",
@@ -26,6 +28,8 @@ export enum TokenKind {
   OpGreaterEq = ">=",
   OpContains = "contains",
   OpNotContains = "!contains",
+  OpAnd = "and",
+  OpOr = "or",
 }
 
 export interface Token {
@@ -273,6 +277,14 @@ function lex(lexer: Lexer) {
 
     default: {
       if (acceptString(lexer, "null", makeToken(TokenKind.NullLit, "null"))) {
+        break;
+      } else if (acceptString(lexer, "true", makeToken(TokenKind.TrueLit, "true"))) {
+        break;
+      } else if (acceptString(lexer, "false", makeToken(TokenKind.FalseLit, "false"))) {
+        break;
+      } else if (acceptString(lexer, "and", makeToken(TokenKind.OpAnd, "and"))) {
+        break;
+      } else if (acceptString(lexer, "or", makeToken(TokenKind.OpOr, "or"))) {
         break;
       } else if (acceptString(lexer, "contains", makeToken(TokenKind.OpContains, "contains"))) {
         break;

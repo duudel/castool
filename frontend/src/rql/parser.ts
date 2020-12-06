@@ -11,6 +11,8 @@ export type Ast = makeAdt<{
   
   column: { name: Token, pos: number },
   nullLit: { pos: number },
+  trueLit: { pos: number },
+  falseLit: { pos: number },
   stringLit: { value: Token, pos: number },
   numberLit: { value: Token, pos: number },
   dateLit: { value: Token, pos: number },
@@ -23,7 +25,7 @@ export type AstCont = Ast & { _type: "cont" };
 export type AstWhere = Ast & { _type: "where" };
 export type AstProject = Ast & { _type: "project" };
 export type AstExtend = Ast & { _type: "extend" };
-export type AstExpr = Ast & { _type: "column" | "nullLit" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" };
+export type AstExpr = Ast & { _type: "column" | "nullLit" | "trueLit" | "falseLit" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" };
 
 export interface Parser {
   input: string;
@@ -106,6 +108,14 @@ function parseOperand(parser: Parser): AstExpr | null {
     if (nullLit) {
       return { _type: "nullLit", pos: nullLit.pos };
     }
+    const trueLit = acceptToken(parser, TokenKind.TrueLit);
+    if (trueLit) {
+      return { _type: "trueLit", pos: trueLit.pos };
+    }
+    const falseLit = acceptToken(parser, TokenKind.FalseLit);
+    if (falseLit) {
+      return { _type: "falseLit", pos: falseLit.pos };
+    }
     const stringLit = acceptToken(parser, TokenKind.StringLit);
     if (stringLit) {
       return { _type: "stringLit", value: stringLit, pos: stringLit.pos };
@@ -133,6 +143,7 @@ function binaryOpFromToken<T extends {
     | TokenKind.OpLess | TokenKind.OpLessEq
     | TokenKind.OpGreater | TokenKind.OpGreaterEq
     | TokenKind.OpContains | TokenKind.OpNotContains
+    | TokenKind.OpAnd | TokenKind.OpOr
 }>(token: T): BinaryOperator {
   switch (token.kind) {
     case TokenKind.OpPlus: return BinaryOperator.Plus;
@@ -147,6 +158,8 @@ function binaryOpFromToken<T extends {
     case TokenKind.OpGreaterEq: return BinaryOperator.GreaterEq;
     case TokenKind.OpContains: return BinaryOperator.Contains;
     case TokenKind.OpNotContains: return BinaryOperator.NotContains;
+    case TokenKind.OpAnd: return BinaryOperator.And;
+    case TokenKind.OpOr: return BinaryOperator.Or;
   }
 }
 
@@ -181,14 +194,14 @@ function parseSumExpression(parser: Parser): AstExpr | null {
 }
 
 // Contains, NotContains
-function parseLevel1Expression(parser: Parser): AstExpr | null {
+function parseContainsExpression(parser: Parser): AstExpr | null {
   let left = parseSumExpression(parser);
   if (!left) return null;
   do {
     let opToken = acceptAnyToken(parser, [TokenKind.OpContains, TokenKind.OpNotContains]);
     if (!opToken) break;
     const op = binaryOpFromToken(opToken);
-    const right = parseLevel1Expression(parser);
+    const right = parseContainsExpression(parser);
     if (!right) return null;
     left = { _type: "binaryOp", op, exprA: left, exprB: right, pos: opToken.pos };
   } while (true);
@@ -196,8 +209,8 @@ function parseLevel1Expression(parser: Parser): AstExpr | null {
 }
 
 // Comparisons: == != < > <= >=
-function parseLevel0Expression(parser: Parser): AstExpr | null {
-  let left = parseLevel1Expression(parser);
+function parseComparisonExpression(parser: Parser): AstExpr | null {
+  let left = parseContainsExpression(parser);
   if (!left) return null;
   do {
     let opToken = acceptAnyToken(parser, [
@@ -207,30 +220,30 @@ function parseLevel0Expression(parser: Parser): AstExpr | null {
     ]);
     if (!opToken) break;
     const op = binaryOpFromToken(opToken);
-    const right = parseLevel0Expression(parser);
+    const right = parseComparisonExpression(parser);
     if (!right) return null;
     left = { _type: "binaryOp", op, exprA: left, exprB: right, pos: opToken.pos };
   } while (true);
   return left;
 }
 
-//// Comparisons: and or
-//function parseLogcalExpression(parser: Parser): AstExpr | null {
-//  let left = parseLevel1Expression(parser);
-//  if (!left) return null;
-//  do {
-//    let opToken = acceptAnyToken(parser, [TokenKind.OpEqual, TokenKind.OpNotEqual]);
-//    if (!opToken) break;
-//    const op = binaryOpFromToken(opToken);
-//    const right = parseLogcalExpression(parser);
-//    if (!right) return null;
-//    left = { _type: "binaryOp", op, exprA: left, exprB: right, pos: opToken.pos };
-//  } while (true);
-//  return left;
-//}
+// Logical and, or
+function parseLogicalExpression(parser: Parser): AstExpr | null {
+  let left = parseComparisonExpression(parser);
+  if (!left) return null;
+  do {
+    let opToken = acceptAnyToken(parser, [TokenKind.OpAnd, TokenKind.OpOr]);
+    if (!opToken) break;
+    const op = binaryOpFromToken(opToken);
+    const right = parseLogicalExpression(parser);
+    if (!right) return null;
+    left = { _type: "binaryOp", op, exprA: left, exprB: right, pos: opToken.pos };
+  } while (true);
+  return left;
+}
 
 function parseExpression(parser: Parser): AstExpr | null {
-  return parseLevel0Expression(parser)
+  return parseLogicalExpression(parser)
 }
 
 function parseWhere(parser: Parser, pos: number): Ast | null {
