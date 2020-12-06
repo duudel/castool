@@ -1,4 +1,47 @@
-import { TokenKind, Token, Lexer } from './types';
+import { lexError, LexError, Result } from "./common";
+
+export enum TokenKind {
+  Ident = "Ident",
+  StringLit = "StringLit",
+  NumberLit = "NumberLit",
+  DateLit = "DateLit",
+  // special
+  Bar = "|",
+  LParen = "(",
+  RParen = ")",
+  Comma = ",",
+  // operators
+  OpNot = "!",
+  OpPlus = "+",
+  OpMinus = "-",
+  OpTimes = "*",
+  OpDivide = "/",
+  OpAssign = "=",
+  OpEqual = "==",
+  OpNotEqual = "!=",
+  OpContains = "contains",
+  OpNotContains = "!contains",
+}
+
+export interface Token {
+  kind: TokenKind;
+  value: string;
+  pos: number;
+}
+
+export interface Lexer {
+  input: string;
+  pos: number;
+
+  tokens: Token[];
+  error: LexError | null;
+};
+
+export type LexResult = Result<
+  { tokens: Token[] },
+  { error: LexError }
+>;
+
 
 function makeToken(kind: TokenKind, value: string, pos?: number) {
   return { kind, value, pos: pos ? pos : -1 };
@@ -16,7 +59,7 @@ function hasError(lexer: Lexer): boolean { return (lexer.error !== null); }
 function currentChar(lexer: Lexer): string { return lexer.input[lexer.pos]; }
 
 function lexicalError(lexer: Lexer, error: string) {
-  lexer.error = error;
+  lexer.error = lexError(error, lexer.input, lexer.pos);
 }
 
 function addToken(lexer: Lexer, token: Token) {
@@ -187,12 +230,16 @@ function lex(lexer: Lexer) {
   }
 }
 
-export function tokenize(input: string): Token[] | string {
+export function tokenize(input: string): LexResult {
   const lexer: Lexer = { input, pos: 0, tokens: [], error: null };
   while (inputLeft(lexer) && !hasError(lexer)) {
     lex(lexer);
   }
 
-  return (lexer.error === null) ? lexer.tokens : lexer.error;
+  if (lexer.error !== null) {
+    return { _type: "failed", error: lexer.error };
+  } else {
+    return { _type: "success", tokens: lexer.tokens };
+  }
 }
 

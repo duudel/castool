@@ -1,34 +1,55 @@
-import { TokenKind, Token, UnaryOperator, BinaryOperator, Ast, AstExpr, Parser } from './types';
-import { tokenize } from './lexer';
+import { UnaryOperator, BinaryOperator } from './types';
+import { TokenKind, Token, tokenize, LexResult } from './lexer';
+import { makeAdt, ParseError, parseError, Result } from './common';
 
-function getInputPosition(input: string, pos: number): [number, number] {
-  let line = 0;
-  let col = 0;
-  while (pos > 0) {
-    if (input.charAt(pos) === '\n') {
-      line++;
-    } else if (line === 0) {
-      col++;
-    }
-    pos--;
-  }
-  return [line, col];
+export type Ast = makeAdt<{
+  table: { name: Token, pos: number },
+  cont: { source: Ast, op: Ast, pos: number }
+  where: { expr: AstExpr, pos: number },
+  project: { names: Token[], pos: number },
+  extend: { name: Token, expr: AstExpr, pos: number },
+  
+  column: { name: Token, pos: number },
+  stringLit: { value: Token, pos: number },
+  numberLit: { value: Token, pos: number },
+  dateLit: { value: Token, pos: number },
+  unaryOp: { op: UnaryOperator, expr: AstExpr, pos: number },
+  binaryOp: { op: BinaryOperator, exprA: AstExpr, exprB: AstExpr, pos: number },
+}>;
+
+export type AstTable = Ast & { _type: "table" };
+export type AstCont = Ast & { _type: "cont" };
+export type AstWhere = Ast & { _type: "where" };
+export type AstProject = Ast & { _type: "project" };
+export type AstExtend = Ast & { _type: "extend" };
+export type AstExpr = Ast & { _type: "column" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" };
+
+export interface Parser {
+  input: string;
+  pos: number;
+  tokens: Token[];
+
+  error: ParseError | null;
 }
+
+export type ParseResult = Result<
+  { ast: Ast },
+  { error: ParseError }
+>;
 
 function setParserError(parser: Parser, error: string) {
   if (hasTokens(parser)) {
     const token = currentToken(parser);
-    const [line, col] = getInputPosition(parser.input, token.pos);
-    parser.error = "At " + line + ":" + col + ": " + error;
+    parser.error = parseError(error, parser.input, token.pos);
   } else {
-    parser.error = error;
+    parser.error = parseError(error, parser.input, -1);
   }
 }
 function hasParserError(parser: Parser): boolean { return parser.error !== null; }
 
 function hasTokens(parser: Parser): boolean { return parser.pos < parser.tokens.length; }
 function currentToken(parser: Parser): Token { return parser.tokens[parser.pos]; } // TODO: range check
-function prevToken(parser: Parser): Token { return parser.tokens[parser.pos - 1]; } // TODO: range check
+function prevToken(parser: Parser): Token { return parser.tokens[parser.pos-1]; } // TODO: range check
 
 function advanceParser(parser: Parser) { parser.pos++; }
 
@@ -59,42 +80,20 @@ function expectToken(parser: Parser, kind: TokenKind): Token | null {
   return token;
 }
 
-//  column: { name: Token },
-//  literal: { name: Token },
-//  unaryOp: { op: UnaryOperator, expr: Ast },
-//  binaryOp: { op: BinaryOperator, exprA: Ast, exprB: Ast },
-//  // operators
-//  OpNot = "!",
-//  OpPlus = "+",
-//  OpMinus = "-",
-//  OpTimes = "*",
-//  OpDivide = "/",
-//  OpAssign = "=",
-//  OpEqual = "==",
-//  OpNotEqual = "!=",
-//
-//export enum UnaryOperator {
-//  Not, Plus, Minus
-//}
-//
-//export enum BinaryOperator {
-//  Plus, Minus, Multiply, Divide, Contains, NotContains
-//}
-
 // Unary ops, table column, literal, parentheses
 function parseOperand(parser: Parser): AstExpr | null {
   if (acceptToken(parser, TokenKind.OpNot)) {
     const expr = parseExpression(parser);
     if (!expr) return null;
-    return { _type: "unaryOp", op: UnaryOperator.Not, expr };
+    return { _type: "unaryOp", op: UnaryOperator.Not, expr, pos: expr.pos };
   } else if (acceptToken(parser, TokenKind.OpPlus)) {
     const expr = parseExpression(parser);
     if (!expr) return null;
-    return { _type: "unaryOp", op: UnaryOperator.Plus, expr };
+    return { _type: "unaryOp", op: UnaryOperator.Plus, expr, pos: expr.pos };
   } else if (acceptToken(parser, TokenKind.OpMinus)) {
     const expr = parseExpression(parser);
     if (!expr) return null;
-    return { _type: "unaryOp", op: UnaryOperator.Minus, expr };
+    return { _type: "unaryOp", op: UnaryOperator.Minus, expr, pos: expr.pos };
   } else if (acceptToken(parser, TokenKind.LParen)) {
     const expr = parseExpression(parser);
     if (!expr) return null;
@@ -103,19 +102,19 @@ function parseOperand(parser: Parser): AstExpr | null {
   } else {
     const stringLit = acceptToken(parser, TokenKind.StringLit);
     if (stringLit) {
-      return { _type: "stringLit", value: stringLit };
+      return { _type: "stringLit", value: stringLit, pos: stringLit.pos };
     }
     const numberLit = acceptToken(parser, TokenKind.NumberLit);
     if (numberLit) {
-      return { _type: "numberLit", value: numberLit };
+      return { _type: "numberLit", value: numberLit, pos: numberLit.pos };
     }
     const dateLit = acceptToken(parser, TokenKind.DateLit);
     if (dateLit) {
-      return { _type: "dateLit", value: dateLit };
+      return { _type: "dateLit", value: dateLit, pos: dateLit.pos };
     }
     const ident = expectToken(parser, TokenKind.Ident);
     if (ident) {
-      return { _type: "column", name: ident };
+      return { _type: "column", name: ident, pos: ident.pos };
     }
     return null;
   }
@@ -144,7 +143,7 @@ function parseProductExpression(parser: Parser): AstExpr | null {
     const op = binaryOpFromToken(opToken);
     const right = parseProductExpression(parser);
     if (!right) return null;
-    left = { _type: "binaryOp", op, exprA: left, exprB: right };
+    left = { _type: "binaryOp", op, exprA: left, exprB: right, pos: opToken.pos };
   } while (true);
   return left;
 }
@@ -159,7 +158,7 @@ function parseSumExpression(parser: Parser): AstExpr | null {
     const op = binaryOpFromToken(opToken);
     const right = parseSumExpression(parser);
     if (!right) return null;
-    left = { _type: "binaryOp", op, exprA: left, exprB: right };
+    left = { _type: "binaryOp", op, exprA: left, exprB: right, pos: opToken.pos };
   } while (true);
   return left;
 }
@@ -174,7 +173,7 @@ function parseLevel0Expression(parser: Parser): AstExpr | null {
     const op = binaryOpFromToken(opToken);
     const right = parseProductExpression(parser);
     if (!right) return null;
-    left = { _type: "binaryOp", op, exprA: left, exprB: right };
+    left = { _type: "binaryOp", op, exprA: left, exprB: right, pos: opToken.pos };
   } while (true);
   return left;
 }
@@ -183,22 +182,22 @@ function parseExpression(parser: Parser): AstExpr | null {
   return parseLevel0Expression(parser)
 }
 
-function parseWhere(parser: Parser): Ast | null {
+function parseWhere(parser: Parser, pos: number): Ast | null {
   const expr = parseExpression(parser);
   if (!expr) return null;
-  return { _type: "where", expr };
+  return { _type: "where", expr, pos: expr.pos };
 }
 
-function parseExtend(parser: Parser): Ast | null {
+function parseExtend(parser: Parser, pos: number): Ast | null {
   const name = expectToken(parser, TokenKind.Ident);
   if (!name) return null;
   if (!expectToken(parser, TokenKind.OpAssign)) return null;
   const expr = parseExpression(parser);
   if (!expr) return null;
-  return { _type: "extend", name, expr };
+  return { _type: "extend", name, expr, pos: pos };
 }
 
-function parseProject(parser: Parser): Ast | null {
+function parseProject(parser: Parser, pos: number): Ast | null {
   function parseNames(result: Token[]): Token[] {
     const ident = expectToken(parser, TokenKind.Ident);
     if (ident) {
@@ -213,7 +212,7 @@ function parseProject(parser: Parser): Ast | null {
     }
   }
   const names = parseNames([]);
-  return { _type: "project", names };
+  return { _type: "project", names, pos };
 }
 
 function parseSourceOp(parser: Parser): Ast | null {
@@ -225,11 +224,11 @@ function parseSourceOp(parser: Parser): Ast | null {
 
   switch (ident.value) {
     case "where":
-      return parseWhere(parser);
+      return parseWhere(parser, ident.pos);
     case "extend":
-      return parseExtend(parser);
+      return parseExtend(parser, ident.pos);
     case "project":
-      return parseProject(parser);
+      return parseProject(parser, ident.pos);
   }
 }
 
@@ -237,32 +236,38 @@ function parseTopLevel(parser: Parser): Ast | null {
   const ident = acceptToken(parser, TokenKind.Ident);
   if (!ident) return null;
     
-  let topLevel: Ast = { _type: "table", name: ident };
+  let topLevel: Ast = { _type: "table", name: ident, pos: ident.pos };
 
   while (acceptToken(parser, TokenKind.Bar)) {
+    const barPos = prevToken(parser).pos;
     const op = parseSourceOp(parser);
     if (!op) return null;
-    topLevel = { _type: "cont", source: topLevel, op };
+    topLevel = { _type: "cont", source: topLevel, op, pos: barPos };
   }
   return topLevel;
 }
 
-function parseTokens(input: string, tokens: Token[]): Ast | string {
+export function parseTokens(input: string, tokens: Token[]): ParseResult {
   const parser: Parser = { input, pos: 0, tokens, error: null };
   const result = parseTopLevel(parser);
   if (result === null && hasTokens(parser) && !hasParserError(parser)) {
-    return "Expected top level";
+    setParserError(parser, "Expected top level");
   }
-  return (parser.error !== null) ? parser.error : (result === null ? "No result" : result);
+  if (parser.error !== null) {
+    return { _type: "failed", error: parser.error };
+  } else if (result === null) {
+    return { _type: "failed", error: parseError("No result", input, -1) };
+  } else {
+    return { _type: "success", ast: result };
+  }
 }
 
-export function parse(input: string): Ast | string {
+export function parse(input: string): ParseResult | LexResult {
   const lexResult = tokenize(input);
-  if (typeof lexResult === "string") {
+  if (lexResult._type === "failed") {
     return lexResult;
   } else {
-    console.log(lexResult);
-    return parseTokens(input, lexResult);
+    return parseTokens(input, lexResult.tokens);
   }
 }
 

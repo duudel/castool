@@ -1,4 +1,4 @@
-import React, {useCallback} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import { Dispatch, useMemo } from 'react';
 import styled from 'styled-components';
 
@@ -110,16 +110,15 @@ export function TransformerSection(props: TransformerSectionProps) {
   const { forwardRef, state, dispatch } = props;
   const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
   //const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
-  const [compileError, compileResult] = useMemo(() => {
-    const ast = rql.parse(script);
-    if (typeof ast === "string") return [ast, undefined];
-    const result = rql.compile(ast);
-    return [undefined, result];
-  }, [script]);
+  const [env, setEnv] = useState<rql.CompilationEnv | null>(null);
+  const compileResult = useMemo(() => {
+    if (!env) return null;
+    return rql.compile(script, env);
+  }, [script, env]);
 
-  const execute = useCallback(() => {
-    dispatch(clearTxResults);
-    if (compileResult === undefined) return;
+  const canExecute = compileResult && compileResult.program !== null;
+
+  useEffect(() => {
     const convertDataType = (dt: ColumnValueDataType): rql.DataType => {
       switch (dt) {
         case ColumnValueDataType.Bool: return "boolean";
@@ -130,30 +129,33 @@ export function TransformerSection(props: TransformerSectionProps) {
       }
     };
     const rows = rowsObservable(state);
-    const env: rql.Env = {
+    const columns: [string, rql.DataType][] = state.columnDefinitions.map(cd => [cd.name, convertDataType(cd.dataType)]);
+    const tableDef = { columns };
+    const env: rql.CompilationEnv = {
       tables: {
-        Rows: {
-          columns: state.columnDefinitions.map(cd => {
-            return [cd.name, convertDataType(cd.dataType)];
-          }),
-          rows
-        }
+        Rows: { tableDef, rows }
       }
     };
-    console.log("Env", env);
-    const result = compileResult(env);
+
+    setEnv(env);
+  }, [state, state.columnDefinitions, state.results]);
+
+  const execute = useCallback(() => {
+    if (!env) return null;
+    if (compileResult === null || compileResult.program === null) return;
+
+    dispatch(clearTxResults);
+    const result = compileResult.program(env);
     console.log("Compilation result:", result);
-    if (result.success) {
-      result.result.rows
-        .pipe(
-          rxop.bufferTime(100)
-        )
-        .subscribe(results => {
-          //console.log("Tx results", results);
-          dispatch(addTxResults(results));
-        });
-    }
-  }, [compileResult, state]);
+    result
+      .pipe(
+        rxop.bufferTime(100)
+      )
+      .subscribe(results => {
+        //console.log("Tx results", results);
+        dispatch(addTxResults(results));
+      });
+  }, [compileResult, env, dispatch]);
 
   const pageStart = state.tx.rowsPerPage * state.tx.page;
   const resultsOnPage = state.tx.results.slice(pageStart, pageStart + state.tx.rowsPerPage);
@@ -163,8 +165,8 @@ export function TransformerSection(props: TransformerSectionProps) {
         <ScriptInput rows={10} cols={120} value={script} onChange={ev => setScript(ev.target.value)} />
         {/*<ParsedContainer>{parsed}</ParsedContainer>*/}
       </ScriptContainer>
-      <button disabled={compileError !== undefined} onClick={() => execute()}>Execute</button>
-      {compileError && <span>{compileError}</span>}
+      <button disabled={!canExecute} onClick={() => execute()}>Execute</button>
+      {compileResult && compileResult.error && <span>{JSON.stringify(compileResult.error)}</span>}
       {state.tx.results.length} results
       {resultsOnPage.map((item, i) => {
         return <div>{i} - {JSON.stringify(item)}</div>;
