@@ -12,66 +12,6 @@ import {ColumnValueDataType, ResultRow} from './types';
 
 import * as rql from './rql/rql';
 
-function transform(row: any): any | undefined {
-  if (row.event && typeof row.event === "string") {
-    try {
-      const json = JSON.parse(atob(row.event))
-      return json.shipment;
-      //return json;
-    } catch {
-      return;
-    }
-  }
-  return;
-}
-
-function doTransform(state: State, dispatch: Dispatch<Action>) {
-  dispatch(clearTxResults);
-
-  function convertRow(row: ResultRow): any {
-    const result: { [index: string]: any } = { };
-    state.columnDefinitions.forEach((columnDef, i) => {
-      //console.log("Adding column", columnDef, "to", result, ";", row);
-      const columnValue = row.columnValues[i];
-      if (columnValue.Null !== undefined) {
-        result[columnDef.name] = null;
-      } else {
-        result[columnDef.name] = columnValue[columnDef.dataType].v;
-      }
-    });
-    return result;
-  }
-/*
-  const pages = state.results;
-  const rowObservable = new rxjs.Observable(subscriber => {
-    for (const pi in pages) {
-      const page = pages[pi];
-      for (const ri in page.rows) {
-        const row = page.rows[ri];
-        const rowObject = convertRow(row);
-        subscriber.next(rowObject);
-      }
-    }
-  });
-  createTransformStream(rowObservable)
-    .subscribe(results => {
-      console.log("Tx results", results);
-      dispatch(addTxResults(results));
-  });*/
-  const pages = state.results;
-  for (const pi in pages) {
-    const page = pages[pi];
-    for (const ri in page.rows) {
-      const row = page.rows[ri];
-      const rowObject = convertRow(row);
-      const result = transform(rowObject);
-      if (result !== undefined) {
-        dispatch(addTxResults([result]));
-      }
-    }
-  }
-}
-
 function rowsObservable(state: State): rql.RowsObs {
   function convertRow(row: ResultRow): any {
     const result: { [index: string]: any } = { };
@@ -96,6 +36,7 @@ function rowsObservable(state: State): rql.RowsObs {
         subscriber.next(rowObject);
       }
     }
+    subscriber.complete();
   });
 }
 
@@ -110,9 +51,15 @@ export function TransformerSection(props: TransformerSectionProps) {
   const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
   //const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
   const [env, setEnv] = useState<rql.CompilationEnv | null>(null);
-  const compileResult = useMemo(() => {
-    if (!env) return null;
-    return rql.compile(script, env);
+  const [compileResult, setCompileResult] = useState<rql.CompileResult | null>(null);
+  useEffect(() => {
+    if (env === null) {
+      setCompileResult(null);
+      return;
+    }
+    console.log("Recompiling...");
+    const result = rql.compile(script, env);
+    setCompileResult(result);
   }, [script, env]);
 
   const canExecute = compileResult && compileResult.program !== null;
@@ -151,11 +98,17 @@ export function TransformerSection(props: TransformerSectionProps) {
       )
       .subscribe(results => {
         //console.log("Tx results", results);
-        dispatch(addTxResults(results));
+        if (results.length !== 0) dispatch(addTxResults(results));
       });
   }, [compileResult, env, dispatch]);
 
-  const error = compileResult && compileResult.error && compileResult.error.error + ": " + compileResult.error.message;
+  const formatError = (res: rql.CompileResult | null) => {
+    if (!res || !res.error) return null;
+
+    const { error, message, sourcePos } = res.error;
+    return error + " at " + sourcePos[0] + ":" + sourcePos[1]  + ": " + message;
+  };
+  const error = formatError(compileResult);
 
   const pageStart = state.tx.rowsPerPage * state.tx.page;
   const resultsOnPage = state.tx.results.slice(pageStart, pageStart + state.tx.rowsPerPage);

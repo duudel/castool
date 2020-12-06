@@ -4,8 +4,17 @@ export type Result<Success, Failed> = makeAdt<{
   failed: Failed,
 }>;
 
-export type Value = string | number | boolean;
-export type DataType = "string" | "number" | "boolean" | "date";
+
+export type Value = string | number | boolean | Date | null;
+export type DataType = "null" | "string" | "number" | "boolean" | "date";
+export type DataTypeFrom<T extends Value> =
+   T extends null ? "null"
+  : T extends string ? "string"
+  : T extends number ? "number"
+  : T extends boolean ? "boolean"
+  : T extends Date ? "date"
+  : never;
+
 export type InputRow = { [key: string]: Value };
 export type TableDef = {
   columns: [string, DataType][];

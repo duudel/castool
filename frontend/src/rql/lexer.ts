@@ -5,6 +5,7 @@ export enum TokenKind {
   StringLit = "StringLit",
   NumberLit = "NumberLit",
   DateLit = "DateLit",
+  NullLit = "Null",
   // special
   Bar = "|",
   LParen = "(",
@@ -53,13 +54,53 @@ function isDigit(c: string): boolean { return ('0' <= c) && (c <= '9'); }
 function isAlphaNumeric(c: string): boolean { return isAlphabetical(c) || isDigit(c); }
 function isIdent(c: string): boolean { return isAlphaNumeric(c) || (c === '_'); }
 
-
 function inputLeft(lexer: Lexer): boolean { return (lexer.pos < lexer.input.length); }
 function hasError(lexer: Lexer): boolean { return (lexer.error !== null); }
 function currentChar(lexer: Lexer): string { return lexer.input[lexer.pos]; }
+function peekChar(lexer: Lexer): string | undefined { return (lexer.input.length > lexer.pos + 1) ? lexer.input[lexer.pos + 1] : undefined; }
 
 function lexicalError(lexer: Lexer, error: string) {
   lexer.error = lexError(error, lexer.input, lexer.pos);
+}
+
+function skipMultilineComment(lexer: Lexer) {
+  const startPos = lexer.pos;
+  advance(lexer); // skip /
+  advance(lexer); // skip *
+  while (inputLeft(lexer)) {
+    if (currentChar(lexer) === '*' && peekChar(lexer) === '/') {
+      break;
+    }
+    advance(lexer);
+  }
+  if (!inputLeft(lexer)) {
+    lexer.error = lexError("Un treminated multiline comment", lexer.input, startPos);
+  } else {
+    advance(lexer); // skip *
+    advance(lexer); // skip /
+  }
+}
+
+function skipSingleLineComment(lexer: Lexer) {
+  advance(lexer); // skip /
+  advance(lexer); // skip /
+  while (inputLeft(lexer) && currentChar(lexer) !== '\n') {
+    advance(lexer);
+  }
+  if (inputLeft(lexer)) advance(lexer); // skip newline
+}
+
+function skipWhitespace(lexer: Lexer): boolean {
+  let skipped = false;
+  while (inputLeft(lexer)) {
+    if (isWhitespace(currentChar(lexer))) {
+      skipped = true;
+      advance(lexer);
+      continue;
+    }
+    break;
+  }
+  return skipped;
 }
 
 function addToken(lexer: Lexer, token: Token) {
@@ -104,16 +145,6 @@ function acceptString(lexer: Lexer, s: string, token?: Token): boolean {
   }
 }
 
-function skipWhitespace(lexer: Lexer) {
-  while (inputLeft(lexer)) {
-    if (isWhitespace(currentChar(lexer))) {
-      advance(lexer);
-      continue;
-    }
-    break;
-  }
-}
-
 function lex(lexer: Lexer) {
   switch (currentChar(lexer)) {
     case ' ': case '\t': case '\n': case '\r':
@@ -149,10 +180,17 @@ function lex(lexer: Lexer) {
       advanceWithToken(lexer, makeToken(TokenKind.OpPlus, "-"));
       break;
     case '*':
-      advanceWithToken(lexer, makeToken(TokenKind.OpPlus, "*"));
+      advanceWithToken(lexer, makeToken(TokenKind.OpTimes, "*"));
       break;
     case '/':
-      advanceWithToken(lexer, makeToken(TokenKind.OpPlus, "/"));
+      if (peekChar(lexer) === '/') {
+        skipSingleLineComment(lexer);
+        break;
+      } else if (peekChar(lexer) === '*') {
+        skipMultilineComment(lexer);
+        break;
+      }
+      advanceWithToken(lexer, makeToken(TokenKind.OpDivide, "/"));
       break;
     case '=': {
       advance(lexer);
@@ -211,12 +249,12 @@ function lex(lexer: Lexer) {
       advance(lexer);
       break;
 
-  //Ident = "Ident",
     default: {
-      if (acceptString(lexer, "contains", makeToken(TokenKind.OpContains, "contains"))) {
+      if (acceptString(lexer, "null", makeToken(TokenKind.NullLit, "null"))) {
         break;
-      }
-      if (!isAlphabetical(currentChar(lexer))) {
+      } else if (acceptString(lexer, "contains", makeToken(TokenKind.OpContains, "contains"))) {
+        break;
+      } else if (!isAlphabetical(currentChar(lexer))) {
         lexicalError(lexer, "Invalid character '" + currentChar(lexer) + "'");
         advance(lexer);
         break;

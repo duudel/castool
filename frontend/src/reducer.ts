@@ -36,13 +36,13 @@ export const initialState: State = {
 };
 
 export enum ActionType {
-  ON_CLEAR_RESULTS,
-  ON_START_QUERY,
-  ON_MESSAGE,
-  ON_SET_PAGE,
+  ON_CLEAR_RESULTS = "ON_CLEAR_RESULTS",
+  ON_START_QUERY = "ON_START_QUERY",
+  ON_MESSAGE = "ON_MESSAGE",
+  ON_SET_PAGE = "ON_SET_PAGE",
 
-  ON_TX_RESULTS_CLEAR,
-  ON_TX_RESULTS,
+  ON_TX_RESULTS_CLEAR = "ON_TX_RESULTS_CLEAR",
+  ON_TX_RESULTS = "ON_TX_RESULTS",
 };
 
 export interface OnClearResultsAction {
@@ -144,6 +144,7 @@ function handleMessage(state: State, msg: QueryMessage): State {
 }
 
 export const reducer = (state: State, action: Action): State => {
+  console.log("Action: ", action.type);
   switch (action.type) {
     case ActionType.ON_CLEAR_RESULTS: {
       return { ...state, results: [], resultsNum: null, queryError: null };
@@ -171,6 +172,6 @@ export const reducer = (state: State, action: Action): State => {
       return { ...state, tx: { ...state.tx, results: newResults } };
     }
   }
-  return state;
+  //return state;
 };
 
