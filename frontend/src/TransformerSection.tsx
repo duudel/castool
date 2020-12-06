@@ -76,7 +76,6 @@ function rowsObservable(state: State): rql.RowsObs {
   function convertRow(row: ResultRow): any {
     const result: { [index: string]: any } = { };
     state.columnDefinitions.forEach((columnDef, i) => {
-      //console.log("Adding column", columnDef, "to", result, ";", row);
       const columnValue = row.columnValues[i];
       if (columnValue.Null !== undefined) {
         result[columnDef.name] = null;
@@ -146,7 +145,6 @@ export function TransformerSection(props: TransformerSectionProps) {
 
     dispatch(clearTxResults);
     const result = compileResult.program(env);
-    console.log("Compilation result:", result);
     result
       .pipe(
         rxop.bufferTime(100)
@@ -157,20 +155,25 @@ export function TransformerSection(props: TransformerSectionProps) {
       });
   }, [compileResult, env, dispatch]);
 
+  const error = compileResult && compileResult.error && compileResult.error.error + ": " + compileResult.error.message;
+
   const pageStart = state.tx.rowsPerPage * state.tx.page;
   const resultsOnPage = state.tx.results.slice(pageStart, pageStart + state.tx.rowsPerPage);
   return (
     <Container ref={forwardRef}>
       <ScriptContainer>
-        <ScriptInput rows={10} cols={120} value={script} onChange={ev => setScript(ev.target.value)} />
+        <ScriptInput value={script} onChange={ev => setScript(ev.target.value)} />
         {/*<ParsedContainer>{parsed}</ParsedContainer>*/}
+        <Button disabled={!canExecute} onClick={() => execute()}>Execute</Button>
+        {/*compileResult && compileResult.error && <span>{JSON.stringify(compileResult.error)}</span>*/}
+        {error && <span>{error}</span>}
+        {state.tx.results.length} results
       </ScriptContainer>
-      <button disabled={!canExecute} onClick={() => execute()}>Execute</button>
-      {compileResult && compileResult.error && <span>{JSON.stringify(compileResult.error)}</span>}
-      {state.tx.results.length} results
-      {resultsOnPage.map((item, i) => {
-        return <div>{i} - {JSON.stringify(item)}</div>;
-      })}
+      <ResultsContainer>
+        {resultsOnPage.map((item, i) => {
+          return <div key={"row" + (pageStart + i)}>{pageStart + i} - {JSON.stringify(item)}</div>;
+        })}
+      </ResultsContainer>
     </Container>
   );
 }
@@ -180,17 +183,37 @@ const Container = styled.div`
 `;
 
 const ScriptContainer = styled.div`
+  position: sticky;
+  top: 0;
+  left: 0;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
+
+  background: white;
 `;
 
 const ScriptInput = styled.textarea`
   padding: 8px;
+  width: 100%;
+  height: 160px;
   font-size: 10pt;
   font-family: "Verdana";
 `;
 
+const Button = styled.button<{ disabled?: boolean }>`
+  padding: 10px;
+  font-size: 12pt;
+  color: ${({ disabled }) => (disabled ? "#888" : "black")};
+  background: #bbb;
+  border: 2.5px solid #989;
+  border-radius: 2px;
+`;
+
 const ParsedContainer = styled.pre`
   padding: 10px;
+`;
+
+const ResultsContainer = styled.div`
+  overflow: scroll;
 `;
 
