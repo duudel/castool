@@ -6,6 +6,7 @@ export enum UnaryOperator {
 export enum BinaryOperator {
   Plus, Minus, Multiply, Divide,
   Equal, NotEqual,
+  Less, LessEq, Greater, GreaterEq,
   Contains, NotContains
 }
 

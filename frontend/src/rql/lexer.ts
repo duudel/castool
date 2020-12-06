@@ -20,6 +20,10 @@ export enum TokenKind {
   OpAssign = "=",
   OpEqual = "==",
   OpNotEqual = "!=",
+  OpLess = "<",
+  OpGreater = ">",
+  OpLessEq = "<=",
+  OpGreaterEq = ">=",
   OpContains = "contains",
   OpNotContains = "!contains",
 }
@@ -198,6 +202,24 @@ function lex(lexer: Lexer) {
         advanceWithToken(lexer, makeToken(TokenKind.OpEqual, "=="));
       } else {
         addToken(lexer, makeToken(TokenKind.OpAssign, "="));
+      }
+      break;
+    }
+    case '<': {
+      advance(lexer);
+      if (inputLeft(lexer) && currentChar(lexer) === '=') {
+        advanceWithToken(lexer, makeToken(TokenKind.OpLessEq, "<="))
+      } else {
+        addToken(lexer, makeToken(TokenKind.OpLess, "<"));
+      }
+      break;
+    }
+    case '>': {
+      advance(lexer);
+      if (inputLeft(lexer) && currentChar(lexer) === '=') {
+        advanceWithToken(lexer, makeToken(TokenKind.OpGreaterEq, ">="))
+      } else {
+        addToken(lexer, makeToken(TokenKind.OpGreater, ">"));
       }
       break;
     }

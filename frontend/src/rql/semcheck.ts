@@ -52,7 +52,7 @@ function semSuccessExpr<T extends Value, D extends DataTypeFrom<T>>(dataType: D,
 function semSuccessQuery<Q extends CheckedQuery>(query: Q): SemCheckResult<Q> { return semSuccess(query); }
 function semFailure(ctx: SemCheckContext, ast: Ast, error: string): SemCheckFailure { return { success: false, error: semError(error, ctx.input, ast.pos) }; }
 
-function evalUnary<T extends Value>(evaluate: (row: InputRow) => Value, then: (x: T) => (T | null)): (row: InputRow) => (T | null) {
+function evalUnarySafe<T extends Value>(evaluate: (row: InputRow) => Value, then: (x: T) => (T | null)): (row: InputRow) => (T | null) {
   return (row: InputRow) => {
     const x = evaluate(row) as T;
     if (x === null) return null;
@@ -60,7 +60,7 @@ function evalUnary<T extends Value>(evaluate: (row: InputRow) => Value, then: (x
   }
 }
 
-function evalBinary<A extends Value, B extends Value, R extends Value>(
+function evalBinarySafe<A extends Value, B extends Value, R extends Value>(
   evalA: (row: InputRow) => Value,
   evalB: (row: InputRow) => Value,
   then: (a: A, b: B) => (R | null)
@@ -70,6 +70,18 @@ function evalBinary<A extends Value, B extends Value, R extends Value>(
     const b = evalB(row) as B;
     if (a === null) return null;
     if (b === null) return null;
+    return then(a, b);
+  }
+}
+
+function evalBinary<A extends Value, B extends Value, R extends Value>(
+  evalA: (row: InputRow) => Value,
+  evalB: (row: InputRow) => Value,
+  then: (a: A | null, b: B | null) => (R | null)
+): (row: InputRow) => (R | null) {
+  return (row: InputRow) => {
+    const a = evalA(row) as A;
+    const b = evalB(row) as B;
     return then(a, b);
   }
 }
@@ -87,14 +99,14 @@ function semCheckUnaryOp(ctx: SemCheckContext, source: TableDef, expr: AstExpr &
     }
     case UnaryOperator.Plus: {
       if (operandDataType === "number") {
-        const evaluate = evalUnary<number>(evaluateExpr, x => +x);
+        const evaluate = evalUnarySafe<number>(evaluateExpr, x => +x);
         return semSuccessExpr("number", evaluate);
       }
       return semFailure(ctx, expr, "Cannot use unary + on " + operandDataType);
     }
     case UnaryOperator.Minus: {
       if (operandDataType !== "number") {
-        const evaluate = evalUnary<number>(evaluateExpr, x => -x);
+        const evaluate = evalUnarySafe<number>(evaluateExpr, x => -x);
         return semSuccessExpr("number", evaluate);
       }
       return semFailure(ctx, expr, "Cannot use unary - on " + operandDataType);
@@ -110,30 +122,30 @@ function semCheckBinaryOp(ctx: SemCheckContext, source: TableDef, expr: AstExpr 
   if (!b.success) return b;
 
   const { dataType: dataTypeA, evaluate: evalA } = a.result;
-  const { dataType: dataTypeB, evaluate: evalB } = a.result;
+  const { dataType: dataTypeB, evaluate: evalB } = b.result;
   switch (expr.op) {
     case BinaryOperator.Minus:
       if (dataTypeA !== "number" || dataTypeB !== "number") {
         return semFailure(ctx, expr, `Cannot subtract '${dataTypeB}' from '${dataTypeA}'`);
       } else {
-        const evaluate = evalBinary<number, number, number>(evalA, evalB, (a, b) => a - b);
+        const evaluate = evalBinarySafe<number, number, number>(evalA, evalB, (a, b) => a - b);
         return semSuccessExpr("number", evaluate);
       }
     case BinaryOperator.Plus:
       if (dataTypeA === "number") {
         if (dataTypeB === "number") {
-          const evaluate = evalBinary<number, number, number>(evalA, evalB, (a, b) => a + b);
+          const evaluate = evalBinarySafe<number, number, number>(evalA, evalB, (a, b) => a + b);
           return semSuccessExpr("number", evaluate);
         } else if (dataTypeB === "string") {
-          const evaluate = evalBinary<number, string, string>(evalA, evalB, (a, b) => a + b);
+          const evaluate = evalBinarySafe<number, string, string>(evalA, evalB, (a, b) => a + b);
           return semSuccessExpr("string", evaluate);
         }
       } else if (dataTypeA === "string") {
         if (dataTypeB === "number") {
-          const evaluate = evalBinary<string, number, string>(evalA, evalB, (a, b) => a + b);
+          const evaluate = evalBinarySafe<string, number, string>(evalA, evalB, (a, b) => a + b);
           return semSuccessExpr("string", evaluate);
         } else if (dataTypeB === "string") {
-          const evaluate = evalBinary<string, string, string>(evalA, evalB, (a, b) => a + b);
+          const evaluate = evalBinarySafe<string, string, string>(evalA, evalB, (a, b) => a + b);
           return semSuccessExpr("string", evaluate);
         }
       }
@@ -142,29 +154,68 @@ function semCheckBinaryOp(ctx: SemCheckContext, source: TableDef, expr: AstExpr 
       if (dataTypeA !== "number" || dataTypeB !== "number") {
         return semFailure(ctx, expr, `Cannot multiply '${dataTypeA}' and '${dataTypeB}'`);
       } else {
-        const evaluate = evalBinary<number, number, number>(evalA, evalB, (a, b) => a * b);
+        const evaluate = evalBinarySafe<number, number, number>(evalA, evalB, (a, b) => a * b);
         return semSuccessExpr("number", evaluate);
       }
     case BinaryOperator.Divide:
       if (dataTypeA !== "number" || dataTypeB !== "number") {
         return semFailure(ctx, expr, `Cannot divide '${dataTypeA}' with '${dataTypeB}'`);
       } else {
-        const evaluate = evalBinary<number, number, number>(evalA, evalB, (a, b) => a / b);
+        const evaluate = evalBinarySafe<number, number, number>(evalA, evalB, (a, b) => a / b);
         return semSuccessExpr("number", evaluate);
       }
     case BinaryOperator.Equal:
     case BinaryOperator.NotEqual:
-      if (dataTypeA !== dataTypeB) {
+    case BinaryOperator.Less:
+    case BinaryOperator.LessEq:
+    case BinaryOperator.Greater:
+    case BinaryOperator.GreaterEq:
+      if (dataTypeA !== dataTypeB && dataTypeA !== "null" && dataTypeB !== "null") {
         return semFailure(ctx, expr, `Cannot compare '${dataTypeA}' with '${dataTypeB}'`);
       } else {
         switch (expr.op) {
           case BinaryOperator.Equal: {
-            const evaluate = (row: InputRow) => a.result.evaluate(row) === b.result.evaluate(row);
-            //const ev = evalBinary(evalA, evalB, (a, b) => a === b)
+            const evaluate = evalBinary(evalA, evalB, (a, b) => a === b)
             return semSuccessExpr("boolean", evaluate);
           }
           case BinaryOperator.NotEqual: {
-            const evaluate = (row: InputRow) => a.result.evaluate(row) !== b.result.evaluate(row);
+            const evaluate = evalBinary(evalA, evalB, (a, b) => a !== b)
+            return semSuccessExpr("boolean", evaluate);
+          }
+          case BinaryOperator.Less: {
+            const evaluate = evalBinary(evalA, evalB, (a, b) => {
+              if (a === null && b === null) return false;
+              else if (a === null) return true;
+              else if (b === null) return false;
+              else return a < b;
+            });
+            return semSuccessExpr("boolean", evaluate);
+          }
+          case BinaryOperator.LessEq: {
+            const evaluate = evalBinary(evalA, evalB, (a, b) => {
+              if (a === null && b === null) return true;
+              else if (a === null) return true;
+              else if (b === null) return false;
+              else return a <= b;
+            });
+            return semSuccessExpr("boolean", evaluate);
+          }
+          case BinaryOperator.Greater: {
+            const evaluate = evalBinary(evalA, evalB, (a, b) => {
+              if (a === null && b === null) return false;
+              else if (a === null) return false;
+              else if (b === null) return true;
+              else return a > b;
+            });
+            return semSuccessExpr("boolean", evaluate);
+          }
+          case BinaryOperator.GreaterEq: {
+            const evaluate = evalBinary(evalA, evalB, (a, b) => {
+              if (a === null && b === null) return true;
+              else if (a === null) return false;
+              else if (b === null) return true;
+              else return a >= b;
+            });
             return semSuccessExpr("boolean", evaluate);
           }
         }
@@ -173,14 +224,17 @@ function semCheckBinaryOp(ctx: SemCheckContext, source: TableDef, expr: AstExpr 
       if (dataTypeA !== "string" || dataTypeB !== "string") {
         return semFailure(ctx, expr, `Cannot use contains with '${dataTypeA}' and '${dataTypeB}'`);
       } else {
-        const evaluate = evalBinary<string, string, boolean>(evalA, evalB, (a, b) => a.includes(b)); //(row: InputRow) => (a.result.evaluate(row) as string).includes(b.result.evaluate(row) as string);
+        const evaluate = evalBinarySafe<string, string, boolean>(evalA, evalB, (a, b) => a.includes(b));
         return semSuccessExpr("boolean", evaluate);
       }
     case BinaryOperator.NotContains:
       if (dataTypeA !== "string" || dataTypeB !== "string") {
         return semFailure(ctx, expr, `Cannot use !contains with '${dataTypeA}' and '${dataTypeB}'`);
       } else {
-        const evaluate = evalBinary<string, string, boolean>(evalA, evalB, (a, b) => !a.includes(b)); //(row: InputRow) => !(a.result.evaluate(row) as string).includes(b.result.evaluate(row) as string);
+        const evaluate = evalBinarySafe<string, string, boolean>(evalA, evalB, (a, b) => {
+          console.log(`'${a}' !contains '${b}'`);
+          return !a.includes(b);
+        });
         return semSuccessExpr("boolean", evaluate);
       }
   }

@@ -129,7 +129,9 @@ function parseOperand(parser: Parser): AstExpr | null {
 function binaryOpFromToken<T extends {
   kind:
     TokenKind.OpPlus | TokenKind.OpMinus | TokenKind.OpTimes | TokenKind.OpDivide
-    | TokenKind.OpEqual | TokenKind.OpNotEqual // TODO: add more comparisons
+    | TokenKind.OpEqual | TokenKind.OpNotEqual
+    | TokenKind.OpLess | TokenKind.OpLessEq
+    | TokenKind.OpGreater | TokenKind.OpGreaterEq
     | TokenKind.OpContains | TokenKind.OpNotContains
 }>(token: T): BinaryOperator {
   switch (token.kind) {
@@ -139,6 +141,10 @@ function binaryOpFromToken<T extends {
     case TokenKind.OpDivide: return BinaryOperator.Divide;
     case TokenKind.OpEqual: return BinaryOperator.Equal;
     case TokenKind.OpNotEqual: return BinaryOperator.NotEqual;
+    case TokenKind.OpLess: return BinaryOperator.Less;
+    case TokenKind.OpLessEq: return BinaryOperator.LessEq;
+    case TokenKind.OpGreater: return BinaryOperator.Greater;
+    case TokenKind.OpGreaterEq: return BinaryOperator.GreaterEq;
     case TokenKind.OpContains: return BinaryOperator.Contains;
     case TokenKind.OpNotContains: return BinaryOperator.NotContains;
   }
@@ -194,7 +200,11 @@ function parseLevel0Expression(parser: Parser): AstExpr | null {
   let left = parseLevel1Expression(parser);
   if (!left) return null;
   do {
-    let opToken = acceptAnyToken(parser, [TokenKind.OpEqual, TokenKind.OpNotEqual]);
+    let opToken = acceptAnyToken(parser, [
+      TokenKind.OpEqual, TokenKind.OpNotEqual,
+      TokenKind.OpLess, TokenKind.OpLessEq,
+      TokenKind.OpGreater, TokenKind.OpGreaterEq
+    ]);
     if (!opToken) break;
     const op = binaryOpFromToken(opToken);
     const right = parseLevel0Expression(parser);
