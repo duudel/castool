@@ -13,6 +13,7 @@ import useSessionStorage from './utils/UseSessionStorageHook';
 import {ColumnValueDataType, ResultRow} from './types';
 
 import * as rql from './rql/rql';
+import {JsonSyntaxHighlight} from './json-syntax/JsonSyntaxHighlight';
 
 function rowsObservable(state: State): rql.RowsObs {
   function convertRow(row: ResultRow): any {
@@ -66,11 +67,19 @@ function ResultsContainer(props: ResultsContainerProps) {
         return (
           <Row key={"row-" + (pageStart + i)}>
             <RowNumber>{pageStart + i}</RowNumber>
-            {schema.columns.map(([columnName]) => {
+            {schema.columns.map(([columnName, columnDataType]) => {
               const value = item[columnName];
               if (value === undefined) {
                 console.log("Undefined: ", columnName, item);
                 return <Cell key={columnName}>Undefined</Cell>;
+              }
+              switch (columnDataType) {
+                case "object":
+                  return (
+                    <Cell key={columnName}>
+                      <JsonSyntaxHighlight value={JSON.stringify(value, null, 2)}/>
+                    </Cell>
+                  );
               }
               return <Cell key={columnName}>
                 {value === null ? "null" : value.toString()}
@@ -135,15 +144,17 @@ export function TransformerSection(props: TransformerSectionProps) {
         Rows: { tableDef, rows }
       },
       userFunctions: {
-        decodeBase64: {
+        decode_base64: {
           arguments: [["input", "string"]],
           returnType: "string",
           func: (input: string): string => atob(input),
         },
         parse_json: {
           arguments: [["s", "string"]],
-          returnType: "string",
-          func: () => "Hello",
+          returnType: "object",
+          func: (s: string) => {
+            try { return JSON.parse(s); } catch { return null; }
+          },
         }
       }
     };

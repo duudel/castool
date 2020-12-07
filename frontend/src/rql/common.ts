@@ -4,15 +4,19 @@ export type Result<Success, Failed> = makeAdt<{
   failed: Failed,
 }>;
 
+export interface Obj {
+  [key: string]: Value;
+};
 
-export type Value = string | number | boolean | Date | null;
-export type DataType = "null" | "string" | "number" | "boolean" | "date";
+export type Value = string | number | boolean | Date | Obj | null;
+export type DataType = "null" | "string" | "number" | "boolean" | "date" | "object";
 export type DataTypeFrom<T extends Value> =
    T extends null ? "null"
   : T extends string ? "string"
   : T extends number ? "number"
   : T extends boolean ? "boolean"
   : T extends Date ? "date"
+  : T extends Obj ? "object"
   : never;
 
 export type InputRow = {
