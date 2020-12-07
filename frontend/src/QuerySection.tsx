@@ -5,9 +5,9 @@ import { Dispatch, useCallback, useEffect, useState } from "react";
 import { ColumnDefinition, ColumnValue, ResultRow, ResultPage } from './types';
 import { Action, ActionType, State } from './reducer';
 
-import { JsonSyntaxHighlight } from './JsonSyntaxHighlight';
+import { JsonSyntaxHighlight } from './json-syntax/JsonSyntaxHighlight';
 
-import useSessionStorage from './UseSessionStorageHook';
+import useSessionStorage from './utils/UseSessionStorageHook';
 
 function columnValueToString(column: ColumnValue) {
   if (column.Null !== undefined) {

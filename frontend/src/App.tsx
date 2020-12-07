@@ -4,7 +4,7 @@ import styled from 'styled-components';
 import casLogo from "./CasTool-2-icon.png";
 import "./App.css";
 
-import { useWebsocket } from './UseWebsocketHook';
+import { useWebsocket } from './utils/UseWebsocketHook';
 import Split from './Split';
 import QuerySection from './QuerySection';
 import { TransformerSection } from './TransformerSection';

@@ -9,7 +9,7 @@ import * as rxop from 'rxjs/operators';
 
 import { Action, State, clearTxResults, addTxResults, setTxSchema } from './reducer';
 
-import useSessionStorage from './UseSessionStorageHook';
+import useSessionStorage from './utils/UseSessionStorageHook';
 import {ColumnValueDataType, ResultRow} from './types';
 
 import * as rql from './rql/rql';
@@ -167,9 +167,11 @@ export function TransformerSection(props: TransformerSectionProps) {
     <Container ref={forwardRef}>
       <ScriptContainer ref={scriptRef}>
         <ScriptInput value={script} onChange={ev => setScript(ev.target.value)} />
-        <Button disabled={!canExecute} onClick={() => execute()}>Execute</Button>
+        <ScriptExecutionControls>
+          <Button disabled={!canExecute} onClick={() => execute()}>Execute</Button>
+          <ResultsNum>{state.tx.results.length} results</ResultsNum>
+        </ScriptExecutionControls>
         {error && <span>{error}</span>}
-        {state.tx.results.length} results
       </ScriptContainer>
       <Split A={scriptRef} B={resultsRef} container={forwardRef} />
       <ResultsContainer state={state} forwardRef={resultsRef} />
@@ -206,6 +208,15 @@ const Button = styled.button<{ disabled?: boolean }>`
   background: #bbb;
   border: 2.5px solid #989;
   border-radius: 2px;
+`;
+
+const ScriptExecutionControls = styled.div`
+  display: flex;
+  flex-direction: row;
+`;
+
+const ResultsNum = styled.div`
+  padding: 10px;
 `;
 
 const ResultsTableContainer = styled.div`
