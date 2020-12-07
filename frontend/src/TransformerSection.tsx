@@ -1,6 +1,8 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import { Dispatch, useMemo } from 'react';
 import styled from 'styled-components';
+
+import Split from './Split';
 
 import * as rxjs from 'rxjs';
 import * as rxop from 'rxjs/operators';
@@ -41,14 +43,16 @@ function rowsObservable(state: State): rql.RowsObs {
 }
 
 interface ResultsContainerProps {
+  forwardRef: { current: HTMLDivElement | null };
   state: Pick<State, "tx">;
 }
 
 function ResultsContainer(props: ResultsContainerProps) {
-  const { state: { tx: { schema, results, page, rowsPerPage } } } = props;
+  const { state: { tx: { schema, results, page, rowsPerPage } }, forwardRef } = props;
   const pageStart = rowsPerPage * page;
   const resultsOnPage = results.slice(pageStart, pageStart + rowsPerPage);
-  return (
+  return (schema.columns.length > 0) ? (
+  <ResultsTableContainer ref={forwardRef}>
     <ResultsTable>
       <thead>
         <Row>
@@ -64,6 +68,10 @@ function ResultsContainer(props: ResultsContainerProps) {
             <RowNumber>{pageStart + i}</RowNumber>
             {schema.columns.map(([columnName]) => {
               const value = item[columnName];
+              if (value === undefined) {
+                console.log("Undefined: ", columnName, item);
+                return <Cell key={columnName}>Undefined</Cell>;
+              }
               return <Cell key={columnName}>
                 {value === null ? "null" : value.toString()}
               </Cell>;
@@ -72,7 +80,8 @@ function ResultsContainer(props: ResultsContainerProps) {
         );
       })}
     </ResultsTable>
-  );
+  </ResultsTableContainer>
+  ) : null;
 }
 
 interface TransformerSectionProps {
@@ -83,6 +92,8 @@ interface TransformerSectionProps {
 
 export function TransformerSection(props: TransformerSectionProps) {
   const { forwardRef, state, dispatch } = props;
+  const scriptRef = useRef<HTMLDivElement | null>(null);
+  const resultsRef = useRef<HTMLDivElement | null>(null);
   const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
   //const parsed = useMemo(() => JSON.stringify(rql.parse(script), null, 2), [script]);
   const [env, setEnv] = useState<rql.CompilationEnv | null>(null);
@@ -154,21 +165,20 @@ export function TransformerSection(props: TransformerSectionProps) {
 
   return (
     <Container ref={forwardRef}>
-      <ScriptContainer>
+      <ScriptContainer ref={scriptRef}>
         <ScriptInput value={script} onChange={ev => setScript(ev.target.value)} />
-        {/*<ParsedContainer>{parsed}</ParsedContainer>*/}
         <Button disabled={!canExecute} onClick={() => execute()}>Execute</Button>
-        {/*compileResult && compileResult.error && <span>{JSON.stringify(compileResult.error)}</span>*/}
         {error && <span>{error}</span>}
         {state.tx.results.length} results
       </ScriptContainer>
-      <ResultsContainer state={state} />
+      <Split A={scriptRef} B={resultsRef} container={forwardRef} />
+      <ResultsContainer state={state} forwardRef={resultsRef} />
     </Container>
   );
 }
 
 const Container = styled.div`
-  overflow: scroll;
+  overflow: hidden;
 `;
 
 const ScriptContainer = styled.div`
@@ -198,12 +208,15 @@ const Button = styled.button<{ disabled?: boolean }>`
   border-radius: 2px;
 `;
 
-const ParsedContainer = styled.pre`
-  padding: 10px;
+const ResultsTableContainer = styled.div`
+  position: relative;
+  overflow: scroll;
+  white-space: nowrap;
+  max-height: 600px;
+  background: white;
 `;
 
 const ResultsTable = styled.table`
-  overflow: scroll;
   border-collapse: collapse;
   border-spacing: 0px;
 `;

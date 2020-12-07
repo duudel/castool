@@ -22,6 +22,10 @@ export function compile(input: string, env: CompilationEnv): CompileResult {
   };
 
   const tokens = lexResult.tokens;
+  if (tokens.length === 0) return {
+    tokens, ast: null, checked: null, program: null, error: null
+  };
+
   const parserResult = parseTokens(input, tokens);
   if (parserResult._type === "failed") return {
     tokens, ast: null, checked: null, program: null, error: parserResult.error

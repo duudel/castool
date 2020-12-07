@@ -123,7 +123,7 @@ function QueryResultsSectionImpl(props: QueryResultsSectionProps) {
     </ErrorContainer>
     );
   } else {
-    return (
+    return (columnDefs.length > 0) ? (
       <ResultsTable>
         <thead>
           <Row key="column-defs">
@@ -135,7 +135,7 @@ function QueryResultsSectionImpl(props: QueryResultsSectionProps) {
           {page.rows.map((row, i) => renderRow(row, i))}
         </tbody>
       </ResultsTable>
-    );
+    ) : null;
   }
 }
 

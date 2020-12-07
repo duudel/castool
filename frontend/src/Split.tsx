@@ -62,7 +62,7 @@ export default function Split(props: SplitProps) {
       return clamp(minSplit, newSplit, maxSplit);
     }
     return split;
-  }, [minA, minB]);
+  }, [minA, minB, container, split]);
 
   const endResize = useCallback((ev: MouseEvent) => {
     if (resizing.current) {
@@ -108,7 +108,7 @@ export default function Split(props: SplitProps) {
       B.current.style.marginTop = reprHeight + "px";
       B.current.style.height = heightB + "px";
     }
-  }, [setReprPosition, A, B]);
+  }, [setReprPosition, A, B, container]);
 
   useEffect(() => {
     const refCurrent = ref.current;
