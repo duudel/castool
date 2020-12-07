@@ -5,7 +5,7 @@ import styled from 'styled-components';
 import * as rxjs from 'rxjs';
 import * as rxop from 'rxjs/operators';
 
-import { Action, State, clearTxResults, addTxResults } from './reducer';
+import { Action, State, clearTxResults, addTxResults, setTxSchema } from './reducer';
 
 import useSessionStorage from './UseSessionStorageHook';
 import {ColumnValueDataType, ResultRow} from './types';
@@ -40,6 +40,41 @@ function rowsObservable(state: State): rql.RowsObs {
   });
 }
 
+interface ResultsContainerProps {
+  state: Pick<State, "tx">;
+}
+
+function ResultsContainer(props: ResultsContainerProps) {
+  const { state: { tx: { schema, results, page, rowsPerPage } } } = props;
+  const pageStart = rowsPerPage * page;
+  const resultsOnPage = results.slice(pageStart, pageStart + rowsPerPage);
+  return (
+    <ResultsTable>
+      <thead>
+        <Row>
+          <RowNumber />
+          {schema.columns.map(([name, dataType], index) =>
+            <HeadCell key={"h-" + name}>{name}: {dataType}</HeadCell>
+          )}
+        </Row>
+      </thead>
+      {resultsOnPage.map((item, i) => {
+        return (
+          <Row key={"row-" + (pageStart + i)}>
+            <RowNumber>{pageStart + i}</RowNumber>
+            {schema.columns.map(([columnName]) => {
+              const value = item[columnName];
+              return <Cell key={columnName}>
+                {value === null ? "null" : value.toString()}
+              </Cell>;
+            })}
+          </Row>
+        );
+      })}
+    </ResultsTable>
+  );
+}
+
 interface TransformerSectionProps {
   forwardRef: { current: HTMLDivElement | null };
   state: State;
@@ -63,6 +98,13 @@ export function TransformerSection(props: TransformerSectionProps) {
   }, [script, env]);
 
   const canExecute = compileResult && compileResult.program !== null;
+  useEffect(() => {
+    if (compileResult && compileResult.checked !== null) {
+      const tableDef = compileResult.checked.tableDef;
+      if (JSON.stringify(state.tx.schema.columns) !== JSON.stringify(tableDef.columns))
+        dispatch(setTxSchema(tableDef));
+    }
+  }, [compileResult, dispatch]);
 
   useEffect(() => {
     const convertDataType = (dt: ColumnValueDataType): rql.DataType => {
@@ -110,8 +152,6 @@ export function TransformerSection(props: TransformerSectionProps) {
   };
   const error = formatError(compileResult);
 
-  const pageStart = state.tx.rowsPerPage * state.tx.page;
-  const resultsOnPage = state.tx.results.slice(pageStart, pageStart + state.tx.rowsPerPage);
   return (
     <Container ref={forwardRef}>
       <ScriptContainer>
@@ -122,11 +162,7 @@ export function TransformerSection(props: TransformerSectionProps) {
         {error && <span>{error}</span>}
         {state.tx.results.length} results
       </ScriptContainer>
-      <ResultsContainer>
-        {resultsOnPage.map((item, i) => {
-          return <div key={"row" + (pageStart + i)}>{pageStart + i} - {JSON.stringify(item)}</div>;
-        })}
-      </ResultsContainer>
+      <ResultsContainer state={state} />
     </Container>
   );
 }
@@ -166,7 +202,43 @@ const ParsedContainer = styled.pre`
   padding: 10px;
 `;
 
-const ResultsContainer = styled.div`
+const ResultsTable = styled.table`
   overflow: scroll;
+  border-collapse: collapse;
+  border-spacing: 0px;
+`;
+
+const Row = styled.tr``;
+
+const RowNumber = styled.td`
+  padding: 5px;
+  border: 0.5px solid #ccc;
+  background-color: #eee;
+`;
+
+const Cell = styled.td`
+  margin: 0;
+  padding: 5px;
+  border: 0.5px solid #ccc;
+  vertical-align: top;
+`;
+
+const HeadCell = styled.th`
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: 5px;
+  border: 0.5px solid #ccc;
+  background-color: #eee;
+`;
+
+const ColumnName = styled.span`
+  font-weight: bold;
+  color: #000;
+`;
+
+const ColumnDataType = styled.span`
+  font-weight: normal;
+  color: #888;
 `;
 

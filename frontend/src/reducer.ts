@@ -1,4 +1,5 @@
 import { ColumnDefinition, ResultRow, ResultPage } from './types';
+import * as rql from './rql/rql';
 
 export enum QueryStatus {
   Done,
@@ -14,6 +15,7 @@ export interface State {
   page: number;
 
   tx: {
+    schema: rql.TableDef;
     results: any[];
     page: number;
     rowsPerPage: number;
@@ -29,6 +31,7 @@ export const initialState: State = {
   page: 0,
 
   tx: {
+    schema: { columns: [] },
     results: [],
     page: 0,
     rowsPerPage: 20,
@@ -41,6 +44,7 @@ export enum ActionType {
   ON_MESSAGE = "ON_MESSAGE",
   ON_SET_PAGE = "ON_SET_PAGE",
 
+  ON_TX_SCHEMA_SET = "ON_TX_SCHEMA_SET",
   ON_TX_RESULTS_CLEAR = "ON_TX_RESULTS_CLEAR",
   ON_TX_RESULTS = "ON_TX_RESULTS",
 };
@@ -63,6 +67,11 @@ export interface OnSetPageAction {
   page: number;
 }
 
+export interface OnTxSetSchema {
+  type: ActionType.ON_TX_SCHEMA_SET;
+  schema: rql.TableDef;
+}
+
 export interface OnTxResultsClear {
   type: ActionType.ON_TX_RESULTS_CLEAR;
 }
@@ -72,10 +81,11 @@ export interface OnTxResults {
   results: any[];
 }
 
-export type Action = OnClearResultsAction | OnStartQueryAction | OnMessageAction | OnSetPageAction | OnTxResultsClear | OnTxResults;
+export type Action = OnClearResultsAction | OnStartQueryAction | OnMessageAction | OnSetPageAction | OnTxSetSchema | OnTxResultsClear | OnTxResults;
 
 export const clearTxResults: Action = { type: ActionType.ON_TX_RESULTS_CLEAR };
 export const addTxResults = (results: any[]): Action => ({ type: ActionType.ON_TX_RESULTS, results });
+export const setTxSchema = (schema: rql.TableDef): Action => ({ type: ActionType.ON_TX_SCHEMA_SET, schema });
 
 interface QueryMessageSuccess {
   type: "QueryMessageSuccess";
@@ -170,6 +180,10 @@ export const reducer = (state: State, action: Action): State => {
       const prevResults = state.tx.results;
       const newResults = prevResults.concat(results);
       return { ...state, tx: { ...state.tx, results: newResults } };
+    }
+    case ActionType.ON_TX_SCHEMA_SET: {
+      const { schema } = action;
+      return { ...state, tx: { ...state.tx, schema } };
     }
   }
   //return state;

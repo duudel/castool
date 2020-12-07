@@ -3,13 +3,14 @@
 
 import { Token, tokenize } from './lexer';
 import { Ast, parseTokens } from './parser';
-import { semCheck, SemCheckEnv } from './semcheck';
+import { CheckedQuery, semCheck, SemCheckEnv } from './semcheck';
 import { CompilationEnv, CompilationResult, compileChecked, TableSource } from './compilation';
 import {RqlError} from './common';
 
 export interface CompileResult {
   tokens: Token[] | null;
   ast: Ast | null;
+  checked: CheckedQuery | null;
   program: CompilationResult | null;
   error: RqlError | null;
 }
@@ -17,13 +18,13 @@ export interface CompileResult {
 export function compile(input: string, env: CompilationEnv): CompileResult {
   const lexResult = tokenize(input);
   if (lexResult._type === "failed") return {
-    tokens: null, ast: null, program: null, error: lexResult.error
+    tokens: null, ast: null, checked: null, program: null, error: lexResult.error
   };
 
   const tokens = lexResult.tokens;
   const parserResult = parseTokens(input, tokens);
   if (parserResult._type === "failed") return {
-    tokens, ast: null, program: null, error: parserResult.error
+    tokens, ast: null, checked: null, program: null, error: parserResult.error
   };
 
   function mapObject<V1, V2, O extends { [key: string]: V1} >(obj: O, f: (v: V1) => V2): { [key: string]: V2 } {
@@ -41,17 +42,18 @@ export function compile(input: string, env: CompilationEnv): CompileResult {
   const ast = parserResult.ast;
   const semCheckResult = semCheck(input, ast, semCheckEnv);
   if (!semCheckResult.success) return {
-    tokens, ast, program: null, error: semCheckResult.error
+    tokens, ast, checked: null, program: null, error: semCheckResult.error
   };
 
-  const program = compileChecked(semCheckResult.result);
+  const checked = semCheckResult.result;
+  const program = compileChecked(checked);
 
   return {
-    tokens, ast, program, error: null
+    tokens, ast, checked, program, error: null
   };
 }
 
-export type{ DataType, Value } from './common';
+export type{ DataType, Value, TableDef } from './common';
 export { parse } from './parser';
 export type{ CompilationEnv, RowsObs } from'./compilation';
 
