@@ -15,9 +15,18 @@ export type DataTypeFrom<T extends Value> =
   : T extends Date ? "date"
   : never;
 
-export type InputRow = { [key: string]: Value };
+export type InputRow = {
+  [key: string]: Value
+};
+
 export type TableDef = {
   columns: [string, DataType][];
+};
+
+export type FunctionDef = {
+  arguments: [name: string, dataType: DataType][];
+  returnType: DataType;
+  func: (...args: any[]) => Value;
 };
 
 export interface LexError {

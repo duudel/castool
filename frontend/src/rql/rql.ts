@@ -40,7 +40,8 @@ export function compile(input: string, env: CompilationEnv): CompileResult {
   }
 
   const semCheckEnv: SemCheckEnv = {
-    tables: mapObject(env.tables, (source: TableSource) => source.tableDef )
+    tables: mapObject(env.tables, (source: TableSource) => source.tableDef ),
+    userFunctions: env.userFunctions,
   };
 
   const ast = parserResult.ast;

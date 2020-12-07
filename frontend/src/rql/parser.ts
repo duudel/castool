@@ -18,6 +18,7 @@ export type Ast = makeAdt<{
   dateLit: { value: Token, pos: number },
   unaryOp: { op: UnaryOperator, expr: AstExpr, pos: number },
   binaryOp: { op: BinaryOperator, exprA: AstExpr, exprB: AstExpr, pos: number },
+  functionCall: { functionName: Token, args: AstExpr[], pos: number },
 }>;
 
 export type AstTable = Ast & { _type: "table" };
@@ -25,7 +26,7 @@ export type AstCont = Ast & { _type: "cont" };
 export type AstWhere = Ast & { _type: "where" };
 export type AstProject = Ast & { _type: "project" };
 export type AstExtend = Ast & { _type: "extend" };
-export type AstExpr = Ast & { _type: "column" | "nullLit" | "trueLit" | "falseLit" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" };
+export type AstExpr = Ast & { _type: "column" | "nullLit" | "trueLit" | "falseLit" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" | "functionCall" };
 
 export interface Parser {
   input: string;
@@ -83,8 +84,30 @@ function expectToken(parser: Parser, kind: TokenKind): Token | null {
   }
   return token;
 }
+function parseArguments(parser: Parser): AstExpr[] | null {
+  const result: AstExpr[] = [];
+  while (true) {
+    const expr = parseExpression(parser);
+    if (expr === null) {
+      if (!hasParserError(parser)) {
+        if (result.length === 0) {
+          return [];
+        } else {
+          setParserError(parser, "Expected function argument");
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
 
-// Unary ops, table column, literal, parentheses
+    result.push(expr);
+    if (!acceptToken(parser, TokenKind.Comma)) break;
+  }
+  return result;
+}
+
+// Unary ops, table column, literal, parentheses, function call
 function parseOperand(parser: Parser): AstExpr | null {
   if (acceptToken(parser, TokenKind.OpNot)) {
     const expr = parseExpression(parser);
@@ -128,8 +151,14 @@ function parseOperand(parser: Parser): AstExpr | null {
     if (dateLit) {
       return { _type: "dateLit", value: dateLit, pos: dateLit.pos };
     }
-    const ident = expectToken(parser, TokenKind.Ident);
+    const ident = acceptToken(parser, TokenKind.Ident);
     if (ident) {
+      if (acceptToken(parser, TokenKind.LParen)) {
+        const args = parseArguments(parser);
+        if (args === null) return null;
+        if (!expectToken(parser, TokenKind.RParen)) return null;
+        return { _type: "functionCall", functionName: ident, args, pos: ident.pos };
+      }
       return { _type: "column", name: ident, pos: ident.pos };
     }
     return null;

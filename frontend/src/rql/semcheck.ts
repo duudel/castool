@@ -1,10 +1,13 @@
 import { BinaryOperator, UnaryOperator } from './types';
 import { Ast, AstCont, AstExpr, AstExtend, AstProject, AstWhere, AstTable } from './parser';
-import { makeAdt, Value, DataType, InputRow, TableDef, SemanticError, semError, DataTypeFrom } from './common';
+import { makeAdt, Value, DataType, FunctionDef, InputRow, TableDef, SemanticError, semError, DataTypeFrom } from './common';
 
 export type SemCheckEnv = {
   tables: {
     [name: string]: TableDef;
+  },
+  userFunctions?: {
+    [name: string]: FunctionDef;
   }
 };
 
@@ -84,6 +87,40 @@ function evalBinary<A extends Value, B extends Value, R extends Value>(
     const b = evalB(row) as B;
     return then(a, b);
   }
+}
+
+function findFunctionDef(ctx: SemCheckContext, funcName: string): FunctionDef | null {
+  return ctx.env.userFunctions ? ctx.env.userFunctions[funcName] : null;
+}
+
+function semCheckFunctionCall(ctx: SemCheckContext, source: TableDef, expr: AstExpr & { _type: "functionCall" }): SemCheckExprResult<Value> {
+  const funcName = expr.functionName.value;
+  const funcDef = findFunctionDef(ctx, funcName);
+  if (!funcDef) {
+    return semFailure(ctx, expr, `No such function as '${funcName}' found`);
+  }
+  const defArgs = funcDef.arguments;
+  if (expr.args.length !== funcDef.arguments.length) {
+    return semFailure(ctx, expr, `Function '${funcName}' takes ${defArgs.length} arguments, ${expr.args.length} were given`);
+  }
+  const evals: ((row: InputRow) => Value)[] = [];
+  for (const argI in expr.args) {
+    const arg = expr.args[argI];
+    const argResult = semCheckExpr(ctx, source, arg);
+    if (!argResult.success) return argResult;
+
+    const [defArgName, defArgDataType] = funcDef.arguments[argI];
+    if (argResult.result.dataType !== defArgDataType) {
+      return semFailure(ctx, arg, `Function '${funcName}' parameter '${defArgName}' has type ${defArgDataType}, cannot pass argument of type ${argResult.result.dataType}`);
+    }
+    evals.push(argResult.result.evaluate);
+  }
+
+  const evaluate = (row: InputRow) => {
+    const args = evals.map(evalArg => evalArg(row));
+    return funcDef.func.apply(null, args);
+  };
+  return semSuccessExpr(funcDef.returnType, evaluate);
 }
 
 function semCheckUnaryOp(ctx: SemCheckContext, source: TableDef, expr: AstExpr & { _type: "unaryOp" }): SemCheckExprResult<Value> {
@@ -298,6 +335,8 @@ function semCheckExpr(ctx: SemCheckContext, source: TableDef, expr: AstExpr): Se
       return semCheckUnaryOp(ctx, source, expr);
     case "binaryOp":
       return semCheckBinaryOp(ctx, source, expr);
+    case "functionCall":
+      return semCheckFunctionCall(ctx, source, expr);
   }
 }
 

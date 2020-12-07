@@ -133,6 +133,18 @@ export function TransformerSection(props: TransformerSectionProps) {
     const env: rql.CompilationEnv = {
       tables: {
         Rows: { tableDef, rows }
+      },
+      userFunctions: {
+        decodeBase64: {
+          arguments: [["input", "string"]],
+          returnType: "string",
+          func: (input: string): string => atob(input),
+        },
+        parse_json: {
+          arguments: [["s", "string"]],
+          returnType: "string",
+          func: () => "Hello",
+        }
       }
     };
 
