@@ -269,8 +269,6 @@ function lex(lexer: Lexer) {
       advance(lexer); // skip the ending '
       break;
 
-  //NumberLit = "NumberLit",
-  //DateLit = "DateLit",
     case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
       const startPos = lexer.pos;
       let digits = 1;
@@ -279,8 +277,50 @@ function lex(lexer: Lexer) {
         digits++;
         advance(lexer);
       }
-      if (digits === 4 && inputLeft(lexer) && currentChar(lexer) === '-') {
+      if (digits === 4 && inputLeft(lexer) && accept(lexer, '-')) {
         // Date literal
+        const zero = accept(lexer, '0');
+        const one = !zero && accept(lexer, '1');
+        if (!(zero || one)) {
+          lexicalError(lexer, "Invalid date literal: '0' or '1' expected");
+          return;
+        }
+        if (!inputLeft(lexer) || !isDigit(currentChar(lexer))) {
+          lexicalError(lexer, "Invalid date literal: digit expected");
+          return;
+        } else if (zero && currentChar(lexer) === '0') {
+          lexicalError(lexer, "Invalid date literal: '00' is not a valid month");
+          return;
+        } else if (one && !['0', '1', '2'].includes(currentChar(lexer))) {
+          lexicalError(lexer, "Invalid date literal: '1" + currentChar(lexer) + "' is not a valid month");
+          return;
+        }
+        advance(lexer);
+        if (!inputLeft(lexer) || !accept(lexer, '-')) {
+          lexicalError(lexer, "Invalid date literal: '-' expected");
+          return;
+        }
+        const d0 = accept(lexer, '0');
+        const d1 = !d0 && accept(lexer, '1');
+        const d2 = !d0 && !d1 && accept(lexer, '2');
+        const d3 = !d0 && !d1 && !d2 && accept(lexer, '3');
+        if (!inputLeft(lexer)) {
+          lexicalError(lexer, "Invalid date literal: digit expected");
+          return;
+        } else if (d3 && !['0', '1'].includes(currentChar(lexer))) {
+          lexicalError(lexer, "Invalid date literal: '3" + currentChar(lexer) + "'is not valid day of month");
+          return;
+        } else if (!isDigit(currentChar(lexer))) {
+          lexicalError(lexer, "Invalid date literal: digit expected");
+          return;
+        }
+        advance(lexer);
+
+        if (accept(lexer, 'T')) {
+          // TODO: implement
+        }
+
+        addTokenSubstring(lexer, startPos, TokenKind.DateLit);
       } else if (inputLeft(lexer) && currentChar(lexer) === '.') {
         // Floating point literal
         advance(lexer);

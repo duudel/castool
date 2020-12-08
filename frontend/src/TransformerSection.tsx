@@ -10,7 +10,7 @@ import * as rxop from 'rxjs/operators';
 import { Action, State, clearTxResults, addTxResults, setTxSchema } from './reducer';
 
 import useSessionStorage from './utils/UseSessionStorageHook';
-import {ColumnValueDataType, ResultRow} from './types';
+import {ColumnValue, ColumnValueDataType, ResultRow} from './types';
 
 import * as rql from './rql/rql';
 import {JsonSyntaxHighlight} from './json-syntax/JsonSyntaxHighlight';
@@ -149,10 +149,28 @@ export function TransformerSection(props: TransformerSectionProps) {
         case ColumnValueDataType.Integer: return "number";
         case ColumnValueDataType.SmallInt: return "number";
         case ColumnValueDataType.TinyInt: return "number";
+        case ColumnValueDataType.Date: return "date";
+        case ColumnValueDataType.Timestamp: return "date";
         default: return "string";
       }
     };
-    const rows = rowsObservable(state);
+    const convertValue = (dt: ColumnValueDataType, v: any): rql.Value => {
+      switch (dt) {
+        //case ColumnValueDataType.Bool: return "boolean";
+        //case ColumnValueDataType.Integer: return "number";
+        //case ColumnValueDataType.SmallInt: return "number";
+        //case ColumnValueDataType.TinyInt: return "number";
+        case ColumnValueDataType.Date: return new Date(v);
+        case ColumnValueDataType.Timestamp: return new Date(v);
+        default: return v;
+      }
+    };
+    const rows = rowsObservable(state).pipe(
+      rxop.map(row => {
+        state.columnDefinitions.forEach(cd => row[cd.name] = convertValue(cd.dataType, row[cd.name]))
+        return row;
+      })
+    );
     const columns: [string, rql.DataType][] = state.columnDefinitions.map(cd => [cd.name, convertDataType(cd.dataType)]);
     const tableDef = { columns };
     const env: rql.CompilationEnv = {

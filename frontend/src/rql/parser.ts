@@ -340,6 +340,7 @@ function parseTopLevel(parser: Parser): Ast | null {
   return topLevel;
 }
 
+// TODO: parse multiple top levels into a root ast node
 export function parseTokens(input: string, tokens: Token[]): ParseResult {
   const parser: Parser = { input, pos: 0, tokens, error: null };
   const result = parseTopLevel(parser);
