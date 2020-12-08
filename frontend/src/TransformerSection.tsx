@@ -210,7 +210,10 @@ export function TransformerSection(props: TransformerSectionProps) {
   return (
     <Container ref={forwardRef}>
       <ScriptContainer ref={scriptRef}>
-        <ScriptInput value={script} onChange={ev => setScript(ev.target.value)} />
+        <div style={{display: "flex", flexDirection: "row"}}>
+          <ScriptInput value={script} onChange={ev => setScript(ev.target.value)} />
+          <pre style={{overflow: "scroll", height: "200px"}}>{compileResult && compileResult.ast && JSON.stringify(compileResult.ast, null, 2)}</pre>
+        </div>
         <ScriptExecutionControls>
           <Button disabled={!canExecute} onClick={() => execute()}>Execute</Button>
           <ResultsNum>{state.tx.results.length} results</ResultsNum>
@@ -239,7 +242,7 @@ const ScriptContainer = styled.div`
 
 const ScriptInput = styled.textarea`
   padding: 8px;
-  width: 100%;
+  width: 80%;
   height: 160px;
   font-size: 10pt;
   font-family: "Verdana";

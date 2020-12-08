@@ -308,7 +308,7 @@ function lex(lexer: Lexer) {
           lexicalError(lexer, "Invalid date literal: digit expected");
           return;
         } else if (d3 && !['0', '1'].includes(currentChar(lexer))) {
-          lexicalError(lexer, "Invalid date literal: '3" + currentChar(lexer) + "'is not valid day of month");
+          lexicalError(lexer, "Invalid date literal: '3" + currentChar(lexer) + "' is not a valid day of month");
           return;
         } else if (!isDigit(currentChar(lexer))) {
           lexicalError(lexer, "Invalid date literal: digit expected");

@@ -110,15 +110,15 @@ function parseArguments(parser: Parser): AstExpr[] | null {
 // Unary ops, table column, literal, parentheses, function call
 function parseOperand(parser: Parser): AstExpr | null {
   if (acceptToken(parser, TokenKind.OpNot)) {
-    const expr = parseExpression(parser);
+    const expr = parseOperand(parser);
     if (!expr) return null;
     return { _type: "unaryOp", op: UnaryOperator.Not, expr, pos: expr.pos };
   } else if (acceptToken(parser, TokenKind.OpPlus)) {
-    const expr = parseExpression(parser);
+    const expr = parseOperand(parser);
     if (!expr) return null;
     return { _type: "unaryOp", op: UnaryOperator.Plus, expr, pos: expr.pos };
   } else if (acceptToken(parser, TokenKind.OpMinus)) {
-    const expr = parseExpression(parser);
+    const expr = parseOperand(parser);
     if (!expr) return null;
     return { _type: "unaryOp", op: UnaryOperator.Minus, expr, pos: expr.pos };
   } else if (acceptToken(parser, TokenKind.LParen)) {
@@ -152,13 +152,12 @@ function parseOperand(parser: Parser): AstExpr | null {
       return { _type: "dateLit", value: dateLit, pos: dateLit.pos };
     }
     const ident = acceptToken(parser, TokenKind.Ident);
-    if (ident) {
-      if (acceptToken(parser, TokenKind.LParen)) {
-        const args = parseArguments(parser);
-        if (args === null) return null;
-        if (!expectToken(parser, TokenKind.RParen)) return null;
-        return { _type: "functionCall", functionName: ident, args, pos: ident.pos };
-      }
+    if (ident && acceptToken(parser, TokenKind.LParen)) {
+      const args = parseArguments(parser);
+      if (args === null) return null;
+      if (!expectToken(parser, TokenKind.RParen)) return null;
+      return { _type: "functionCall", functionName: ident, args, pos: ident.pos };
+    } else if (ident) {
       return { _type: "column", name: ident, pos: ident.pos };
     }
     return null;
