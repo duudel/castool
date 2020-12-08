@@ -28,8 +28,17 @@ export type TableDef = {
   columns: [string, DataType][];
 };
 
+type FunctionParam = {
+  [name: string]: DataType;
+};
+
+export function deconstructParam(p: FunctionParam): [string, DataType] {
+  const entry0 = Object.entries(p)[0];
+  return entry0;
+}
+
 export type FunctionDef = {
-  arguments: [name: string, dataType: DataType][];
+  parameters: FunctionParam[];
   returnType: DataType;
   func: (...args: any[]) => Value;
 };

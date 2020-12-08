@@ -14,7 +14,8 @@ import {
   DataTypeFrom,
   ExecutionEnv,
   BuiltinFunctions,
-  UserFunctions
+  UserFunctions,
+  deconstructParam
 } from './common';
 
 export type SemCheckEnv = {
@@ -132,9 +133,9 @@ function semCheckFunctionCall(ctx: SemCheckContext, source: TableDef, expr: AstE
   if (!funcDef) {
     return semFailure(ctx, expr, `No such function as '${funcName}' found`);
   }
-  const defArgs = funcDef.arguments;
-  if (expr.args.length !== funcDef.arguments.length) {
-    return semFailure(ctx, expr, `Function '${funcName}' takes ${defArgs.length} arguments, ${expr.args.length} were given`);
+  const params = funcDef.parameters;
+  if (expr.args.length !== params.length) {
+    return semFailure(ctx, expr, `Function '${funcName}' takes ${params.length} arguments, ${expr.args.length} were given`);
   }
   const evals: ((row: InputRow) => Value)[] = [];
   for (const argI in expr.args) {
@@ -142,9 +143,9 @@ function semCheckFunctionCall(ctx: SemCheckContext, source: TableDef, expr: AstE
     const argResult = semCheckExpr(ctx, source, arg);
     if (!argResult.success) return argResult;
 
-    const [defArgName, defArgDataType] = funcDef.arguments[argI];
-    if (argResult.result.dataType !== defArgDataType) {
-      return semFailure(ctx, arg, `Function '${funcName}' parameter '${defArgName}' has type ${defArgDataType}, cannot pass argument of type ${argResult.result.dataType}`);
+    const [paramName, paramDataType] = deconstructParam(params[argI]);
+    if (argResult.result.dataType !== paramDataType) {
+      return semFailure(ctx, arg, `Function '${funcName}' parameter '${paramName}' has type ${paramDataType}, cannot pass argument of type ${argResult.result.dataType}`);
     }
     evals.push(argResult.result.evaluate);
   }

@@ -95,12 +95,12 @@ function ResultsContainer(props: ResultsContainerProps) {
 
 const userFunctions: rql.UserFunctions = {
   decode_base64: {
-    arguments: [["input", "string"]],
+    parameters: [{input: "string"}],
     returnType: "string",
     func: (input: string): string => atob(input),
   },
   parse_json: {
-    arguments: [["s", "string"]],
+    parameters: [{s: "string"}],
     returnType: "object",
     func: (s: string) => {
       try { return JSON.parse(s); } catch { return null; }

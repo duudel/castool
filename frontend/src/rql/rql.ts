@@ -17,27 +17,27 @@ export interface CompileResult {
 
 const builtinFunctions: BuiltinFunctions = {
   parse_int: {
-    arguments: [["str", "string"]],
+    parameters: [{str: "string"}],
     returnType: "number",
     func: (str: string): number => parseInt(str)
   },
   parse_float: {
-    arguments: [["str", "string"]],
+    parameters: [{str: "string"}],
     returnType: "number",
     func: (str: string): number => parseFloat(str)
   },
   starts_with: {
-    arguments: [["str", "string"], ["search", "string"]],
+    parameters: [{str: "string"}, {search: "string"}],
     returnType: "boolean",
     func: (str: string, search: string): boolean => str.startsWith(search)
   },
   ends_with: {
-    arguments: [["str", "string"], ["search", "string"]],
+    parameters: [{str: "string"}, {search: "string"}],
     returnType: "boolean",
     func: (str: string, search: string): boolean => str.endsWith(search)
   },
   avg: {
-    arguments: [["acc", "number"], ["x", "number"]],
+    parameters: [{acc: "number"}, {x: "number"}],
     returnType: "number",
     func: (acc: number, x: number): number => acc + x
   }
