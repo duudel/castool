@@ -1,15 +1,45 @@
 import { BinaryOperator, UnaryOperator } from './types';
 import { Ast, AstCont, AstExpr, AstExtend, AstProject, AstWhere, AstTable } from './parser';
-import { makeAdt, Value, DataType, FunctionDef, InputRow, TableDef, SemanticError, semError, DataTypeFrom } from './common';
+import {
+  makeAdt,
+  Value,
+  DataType,
+  FunctionDef,
+  InputRow,
+  TableDef,
+  TableSource,
+  CompilationEnv,
+  SemanticError,
+  semError,
+  DataTypeFrom,
+  ExecutionEnv,
+  BuiltinFunctions,
+  UserFunctions
+} from './common';
 
 export type SemCheckEnv = {
   tables: {
     [name: string]: TableDef;
   },
-  userFunctions?: {
-    [name: string]: FunctionDef;
-  }
+  builtinFunctions: BuiltinFunctions;
+  userFunctions?: UserFunctions;
 };
+
+function mapObject<V1, V2, O extends { [key: string]: V1} >(obj: O, f: (v: V1) => V2): { [key: string]: V2 } {
+  const result: { [key: string]: V2 } = {};
+  Object.keys(obj).forEach(key => {
+    result[key] = f(obj[key]);
+  });
+  return result;
+}
+
+export function semCheckEnvFrom(env: ExecutionEnv): SemCheckEnv {
+  return {
+    tables: mapObject(env.tables, (source: TableSource) => source.tableDef ),
+    builtinFunctions: env.builtinFunctions,
+    userFunctions: env.userFunctions,
+  };
+}
 
 export type SemCheckContext = {
   input: string;
@@ -89,8 +119,11 @@ function evalBinary<A extends Value, B extends Value, R extends Value>(
   }
 }
 
+// Here we prefer user defined function over builtins, so user defined one can override the builtin. No real reason why, can be changed later.
 function findFunctionDef(ctx: SemCheckContext, funcName: string): FunctionDef | null {
-  return ctx.env.userFunctions ? ctx.env.userFunctions[funcName] : null;
+  const userFunc = ctx.env.userFunctions ?
+    ctx.env.userFunctions[funcName] : null;
+  return userFunc ? userFunc : ctx.env.builtinFunctions[funcName];
 }
 
 function semCheckFunctionCall(ctx: SemCheckContext, source: TableDef, expr: AstExpr & { _type: "functionCall" }): SemCheckExprResult<Value> {
@@ -256,6 +289,7 @@ function semCheckBinaryOp(ctx: SemCheckContext, source: TableDef, expr: AstExpr 
             return semSuccessExpr("boolean", evaluate);
           }
         }
+        throw Error("Unreachable");
       }
     case BinaryOperator.Contains:
       if (dataTypeA !== "string" || dataTypeB !== "string") {

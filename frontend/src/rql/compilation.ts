@@ -1,26 +1,9 @@
-import * as rxjs from 'rxjs';
 import * as rxop from 'rxjs/operators';
 
-import { InputRow, TableDef, FunctionDef } from './common';
+import { InputRow, TableDef, FunctionDef, CompilationEnv, RowsObs } from './common';
 import { CheckedQuery, CheckedCont, CheckedOpQuery, CheckedTable, CheckedExtend, CheckedProject, CheckedWhere } from './semcheck';
 
-export type RowsObs = rxjs.Observable<InputRow>;
-
-export type TableSource = {
-  tableDef: TableDef;
-  rows: RowsObs;
-}
-export type CompilationEnv = {
-  tables: {
-    [name: string]: TableSource;
-  },
-  userFunctions?: {
-    [name: string]: FunctionDef;
-  }
-}
-
 type Env = CompilationEnv;
-
 export type CompilationResult = (env: Env) => RowsObs;
 
 

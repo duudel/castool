@@ -1,3 +1,4 @@
+import * as rxjs from 'rxjs';
 
 export type Result<Success, Failed> = makeAdt<{
   success: Success,
@@ -32,6 +33,25 @@ export type FunctionDef = {
   returnType: DataType;
   func: (...args: any[]) => Value;
 };
+
+export type RowsObs = rxjs.Observable<InputRow>;
+
+export type TableSource = {
+  tableDef: TableDef;
+  rows: RowsObs;
+}
+
+export type UserFunctions = { [name: string]: FunctionDef };
+export type BuiltinFunctions = { [name: string]: FunctionDef };
+export type CompilationEnv = {
+  tables: {
+    [name: string]: TableSource;
+  },
+  userFunctions?: UserFunctions;
+}
+export type ExecutionEnv = {
+  builtinFunctions: BuiltinFunctions;
+} & CompilationEnv;
 
 export interface LexError {
   error: "Lexical error";

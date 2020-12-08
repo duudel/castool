@@ -3,9 +3,9 @@
 
 import { Token, tokenize } from './lexer';
 import { Ast, parseTokens } from './parser';
-import { CheckedQuery, semCheck, SemCheckEnv } from './semcheck';
-import { CompilationEnv, CompilationResult, compileChecked, TableSource } from './compilation';
-import {RqlError} from './common';
+import { CheckedQuery, semCheckEnvFrom, semCheck, SemCheckEnv } from './semcheck';
+import { CompilationResult, compileChecked } from './compilation';
+import { BuiltinFunctions, CompilationEnv, ExecutionEnv, RqlError } from './common';
 
 export interface CompileResult {
   tokens: Token[] | null;
@@ -14,6 +14,34 @@ export interface CompileResult {
   program: CompilationResult | null;
   error: RqlError | null;
 }
+
+const builtinFunctions: BuiltinFunctions = {
+  parse_int: {
+    arguments: [["str", "string"]],
+    returnType: "number",
+    func: (str: string): number => parseInt(str)
+  },
+  parse_float: {
+    arguments: [["str", "string"]],
+    returnType: "number",
+    func: (str: string): number => parseFloat(str)
+  },
+  starts_with: {
+    arguments: [["str", "string"], ["search", "string"]],
+    returnType: "boolean",
+    func: (str: string, search: string): boolean => str.startsWith(search)
+  },
+  ends_with: {
+    arguments: [["str", "string"], ["search", "string"]],
+    returnType: "boolean",
+    func: (str: string, search: string): boolean => str.endsWith(search)
+  },
+  avg: {
+    arguments: [["acc", "number"], ["x", "number"]],
+    returnType: "number",
+    func: (acc: number, x: number): number => acc + x
+  }
+};
 
 export function compile(input: string, env: CompilationEnv): CompileResult {
   const lexResult = tokenize(input);
@@ -31,18 +59,8 @@ export function compile(input: string, env: CompilationEnv): CompileResult {
     tokens, ast: null, checked: null, program: null, error: parserResult.error
   };
 
-  function mapObject<V1, V2, O extends { [key: string]: V1} >(obj: O, f: (v: V1) => V2): { [key: string]: V2 } {
-    const result: { [key: string]: V2 } = {};
-    Object.keys(obj).forEach(key => {
-      result[key] = f(obj[key]);
-    });
-    return result;
-  }
-
-  const semCheckEnv: SemCheckEnv = {
-    tables: mapObject(env.tables, (source: TableSource) => source.tableDef ),
-    userFunctions: env.userFunctions,
-  };
+  const execEnv: ExecutionEnv = { ...env, builtinFunctions };
+  const semCheckEnv: SemCheckEnv = semCheckEnvFrom(execEnv);
 
   const ast = parserResult.ast;
   const semCheckResult = semCheck(input, ast, semCheckEnv);
@@ -58,7 +76,6 @@ export function compile(input: string, env: CompilationEnv): CompileResult {
   };
 }
 
-export type{ DataType, Value, TableDef } from './common';
+export type{ DataType, Value, TableDef, CompilationEnv, UserFunctions, RowsObs } from './common';
 export { parse } from './parser';
-export type{ CompilationEnv, RowsObs } from'./compilation';
 

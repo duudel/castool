@@ -93,6 +93,21 @@ function ResultsContainer(props: ResultsContainerProps) {
   ) : null;
 }
 
+const userFunctions: rql.UserFunctions = {
+  decode_base64: {
+    arguments: [["input", "string"]],
+    returnType: "string",
+    func: (input: string): string => atob(input),
+  },
+  parse_json: {
+    arguments: [["s", "string"]],
+    returnType: "object",
+    func: (s: string) => {
+      try { return JSON.parse(s); } catch { return null; }
+    },
+  }
+};
+
 interface TransformerSectionProps {
   forwardRef: { current: HTMLDivElement | null };
   state: State;
@@ -121,6 +136,7 @@ export function TransformerSection(props: TransformerSectionProps) {
   useEffect(() => {
     if (compileResult && compileResult.checked !== null) {
       const tableDef = compileResult.checked.tableDef;
+      // HACK: without this condition the schema would be reset infinitely
       if (JSON.stringify(state.tx.schema.columns) !== JSON.stringify(tableDef.columns))
         dispatch(setTxSchema(tableDef));
     }
@@ -143,20 +159,7 @@ export function TransformerSection(props: TransformerSectionProps) {
       tables: {
         Rows: { tableDef, rows }
       },
-      userFunctions: {
-        decode_base64: {
-          arguments: [["input", "string"]],
-          returnType: "string",
-          func: (input: string): string => atob(input),
-        },
-        parse_json: {
-          arguments: [["s", "string"]],
-          returnType: "object",
-          func: (s: string) => {
-            try { return JSON.parse(s); } catch { return null; }
-          },
-        }
-      }
+      userFunctions
     };
 
     setEnv(env);
