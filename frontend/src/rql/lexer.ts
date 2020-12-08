@@ -271,9 +271,48 @@ function lex(lexer: Lexer) {
 
   //NumberLit = "NumberLit",
   //DateLit = "DateLit",
-    case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': 
+    case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
+      const startPos = lexer.pos;
+      let digits = 1;
       advance(lexer);
+      while (inputLeft(lexer) && isDigit(currentChar(lexer))) {
+        digits++;
+        advance(lexer);
+      }
+      if (digits === 4 && inputLeft(lexer) && currentChar(lexer) === '-') {
+        // Date literal
+      } else if (inputLeft(lexer) && currentChar(lexer) === '.') {
+        // Floating point literal
+        advance(lexer);
+        if (!inputLeft(lexer) || !isDigit(currentChar(lexer))) {
+          lexicalError(lexer, "Invalid floating point literal");
+          return;
+        }
+
+        while (inputLeft(lexer) && isDigit(currentChar(lexer))) {
+          advance(lexer);
+        }
+
+        if (accept(lexer, 'e') || accept(lexer, 'E')) {
+          accept(lexer, '+') || accept(lexer, '-');
+          if (inputLeft(lexer) && isDigit(currentChar(lexer))) {
+            while (inputLeft(lexer) && isDigit(currentChar(lexer))) {
+              advance(lexer);
+            }
+            addTokenSubstring(lexer, startPos, TokenKind.NumberLit);
+          } else {
+            lexicalError(lexer, "Invalid floating point literal, expecting exponent");
+            return;
+          }
+        } else {
+          addTokenSubstring(lexer, startPos, TokenKind.NumberLit);
+        }
+      } else {
+        // Integer literal
+        addTokenSubstring(lexer, startPos, TokenKind.NumberLit);
+      }
       break;
+    }
 
     default: {
       if (acceptString(lexer, "null", makeToken(TokenKind.NullLit, "null"))) {
