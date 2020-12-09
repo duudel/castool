@@ -1,5 +1,5 @@
 import { BinaryOperator, UnaryOperator } from './types';
-import { Ast, AstCont, AstExpr, AstExtend, AstProject, AstWhere, AstSummarize, AstTable, Aggregation } from './parser';
+import { Ast, AstCont, AstExpr, AstExtend, AstProject, AstWhere, AstSummarize, AstTable, Aggregation, AstOrderBy } from './parser';
 import {
   makeAdt,
   Value,
@@ -67,6 +67,7 @@ export type CheckedQuery = makeAdt<{
   project: { names: string[], tableDef: TableDef },
   extend: { name: string, expr: CheckedExpr<Value>, tableDef: TableDef },
   summarize: { aggregations: CheckedAggr<Value>[], groupBy: string[], tableDef: TableDef },
+  orderBy: { names: string[], order: "asc" | "desc", tableDef: TableDef },
 }>;
 
 export type CheckedTable = CheckedQuery & { _type: "table" };
@@ -75,7 +76,8 @@ export type CheckedWhere = CheckedQuery & { _type: "where" };
 export type CheckedProject = CheckedQuery & { _type: "project" };
 export type CheckedExtend = CheckedQuery & { _type: "extend" };
 export type CheckedSummarize = CheckedQuery & { _type: "summarize" };
-export type CheckedOpQuery = CheckedWhere | CheckedProject | CheckedExtend | CheckedSummarize;
+export type CheckedOrderBy = CheckedQuery & { _type: "orderBy" };
+export type CheckedOpQuery = CheckedWhere | CheckedProject | CheckedExtend | CheckedSummarize | CheckedOrderBy;
 
 interface SemCheckSuccess<R> {
   success: true;
@@ -515,6 +517,20 @@ function semCheckSummarize(ctx: SemCheckContext, source: TableDef, op: AstSummar
   return semSuccessQuery(summarize);
 }
 
+function semCheckOrderBy(ctx: SemCheckContext, source: TableDef, op: AstOrderBy): SemCheckResult<CheckedOrderBy> {
+  const { names: nameTokens, order } = op;
+  const names = nameTokens.map(n => n.value);
+
+  // find first name that is not found in the table def columns
+  const notFoundColumn = names.find(name => source.columns.find(([columnName]) => columnName === name) === undefined);
+  if (notFoundColumn) {
+    return semFailure(ctx, op, "No such column as '" + notFoundColumn + "' found");
+  }
+
+  const orderBy: CheckedOrderBy = { _type: "orderBy", names, order, tableDef: source };
+  return semSuccessQuery(orderBy);
+}
+
 function semCheckTopLevelOp(ctx: SemCheckContext, source: TableDef, op: Ast): SemCheckResult<CheckedOpQuery> {
   switch (op._type) {
     case "project":
@@ -525,6 +541,8 @@ function semCheckTopLevelOp(ctx: SemCheckContext, source: TableDef, op: Ast): Se
       return semCheckWhere(ctx, source, op);
     case "summarize":
       return semCheckSummarize(ctx, source, op);
+    case "orderBy":
+      return semCheckOrderBy(ctx, source, op);
   }
   throw Error("Unreachable");
 }

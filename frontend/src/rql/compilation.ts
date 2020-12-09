@@ -2,7 +2,7 @@ import * as rxjs from 'rxjs';
 import * as rxop from 'rxjs/operators';
 
 import { Value, InputRow, TableDef, FunctionDef, CompilationEnv, RowsObs } from './common';
-import { CheckedQuery, CheckedCont, CheckedOpQuery, CheckedTable, CheckedExtend, CheckedProject, CheckedWhere, CheckedSummarize, CheckedAggr } from './semcheck';
+import { CheckedQuery, CheckedCont, CheckedOpQuery, CheckedTable, CheckedExtend, CheckedProject, CheckedWhere, CheckedSummarize, CheckedAggr, CheckedOrderBy } from './semcheck';
 
 type Env = CompilationEnv;
 export type CompilationResult = (env: Env) => RowsObs;
@@ -62,13 +62,13 @@ function compileSummarize(source: RowsObs, q: CheckedSummarize): CompilationResu
       acc = acc + "_" + row[column];
       return acc;
     }, "");
-    console.log("Key", key);
+    //console.log("Key", key);
     return key;
   });
 
   const aggregate = (aggr: CheckedAggr<Value>) => {
     function aggregateValuesAndN([acc, N]: [Value, number], row: InputRow): [Value, number] {
-      console.log("Aggr ", aggr.name, acc, N);
+      //console.log("Aggr ", aggr.name, acc, N);
       return [aggr.aggregate(acc, row), N + 1];
     }
     return rxop.reduce(aggregateValuesAndN, [aggr.initialValue, 0]);
@@ -84,7 +84,7 @@ function compileSummarize(source: RowsObs, q: CheckedSummarize): CompilationResu
     })
   };
 
-  const logOp = <T>(tag: string) => rxop.map((x: T) => { console.log(tag, ":", x); return x; });
+  //const logOp = <T>(tag: string) => rxop.map((x: T) => { console.log(tag, ":", x); return x; });
 
   const withGroupBy = (): RowsObs => source.pipe(
     //logOp("INPUT"),
@@ -137,6 +137,56 @@ function compileSummarize(source: RowsObs, q: CheckedSummarize): CompilationResu
   }
 }
 
+function compileOrderBy(source: RowsObs, q: CheckedOrderBy): CompilationResult {
+  // TODO: have datatypes choose the final compare per column
+  const compare = (a: InputRow, b: InputRow): number => {
+    const comps = q.names.map(name => {
+      const av = a[name];
+      const bv = b[name];
+      if (av === null && bv === null) {
+        return 0;
+      } else if (av === null) {
+        return -1;
+      } else if (bv === null) {
+        return 1;
+      }
+      if (typeof av !== typeof bv) throw Error("Values should have same type");
+      switch (typeof av) {
+        case "string":
+          return av.localeCompare(bv as string);
+        case "number":
+          return av - (bv as number);
+        case "object":
+          // HACK: should come up with a better and faster way to compare objects, or just not allow comparison.
+          return JSON.stringify(av).localeCompare(JSON.stringify(bv));
+        case "boolean":
+          return av < bv ? -1 : (av > bv ? 1 : 0);
+      }
+      throw Error("Unreachable");
+    });
+    const res = comps.find(v => v !== 0);
+    return res === undefined ? 0 : res;
+  };
+  const compareDesc = (a: InputRow, b: InputRow): number => -compare(a, b);
+  if (q.order === "asc") {
+    return (env: Env) => {
+      return source.pipe(
+        rxop.toArray(),
+        rxop.tap(rows => rows.sort(compare)),
+        rxop.concatMap(rows => rxjs.from(rows))
+      )
+    };
+  } else {
+    return (env: Env) => {
+      return source.pipe(
+        rxop.toArray(),
+        rxop.tap(rows => rows.sort(compareDesc)),
+        rxop.concatMap(rows => rxjs.from(rows))
+      )
+    };
+  }
+}
+
 function compileTopLevelOp(source: RowsObs, q: CheckedOpQuery): CompilationResult {
   switch (q._type) {
     case "project":
@@ -147,6 +197,8 @@ function compileTopLevelOp(source: RowsObs, q: CheckedOpQuery): CompilationResul
       return compileWhere(source, q);
     case "summarize":
       return compileSummarize(source, q);
+    case "orderBy":
+      return compileOrderBy(source, q);
   }
 }
 

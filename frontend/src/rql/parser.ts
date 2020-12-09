@@ -14,6 +14,7 @@ export type Ast = makeAdt<{
   project: { names: Token[], pos: number },
   extend: { name: Token, expr: AstExpr, pos: number },
   summarize: { aggregations: Aggregation[], groupBy: Token[], pos: number },
+  orderBy: { names: Token[], pos: number, order: "asc" | "desc" },
   
   column: { name: Token, pos: number },
   nullLit: { pos: number },
@@ -33,6 +34,7 @@ export type AstWhere = Ast & { _type: "where" };
 export type AstProject = Ast & { _type: "project" };
 export type AstExtend = Ast & { _type: "extend" };
 export type AstSummarize = Ast & { _type: "summarize" };
+export type AstOrderBy = Ast & { _type: "orderBy" };
 export type AstExpr = Ast & { _type: "column" | "nullLit" | "trueLit" | "falseLit" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" | "functionCall" };
 
 export interface Parser {
@@ -83,6 +85,15 @@ function acceptAnyToken<K extends TokenKind, T extends Token & { kind: K }>(pars
   return null;
 }
 
+function expectToken(parser: Parser, kind: TokenKind): Token | null {
+  const token = acceptToken(parser, kind);
+  if (!token) {
+    setParserError(parser, "Expected " + kind);
+    return null;
+  }
+  return token;
+}
+
 function acceptIdent(parser: Parser, value: string): Token | null {
   if (hasTokens(parser)) {
     const token = currentToken(parser);
@@ -94,14 +105,15 @@ function acceptIdent(parser: Parser, value: string): Token | null {
   return null;
 }
 
-function expectToken(parser: Parser, kind: TokenKind): Token | null {
-  const token = acceptToken(parser, kind);
+function expectIdent(parser: Parser, value: string): Token | null {
+  const token = acceptIdent(parser, value);
   if (!token) {
-    setParserError(parser, "Expected " + kind);
+    setParserError(parser, "Expected " + value)
     return null;
   }
   return token;
 }
+
 function parseArguments(parser: Parser): AstExpr[] | null {
   const result: AstExpr[] = [];
   while (true) {
@@ -292,13 +304,13 @@ function parseExpression(parser: Parser): AstExpr | null {
   return parseLogicalExpression(parser)
 }
 
-function parseWhere(parser: Parser, pos: number): Ast | null {
+function parseWhere(parser: Parser, pos: number): AstWhere | null {
   const expr = parseExpression(parser);
   if (!expr) return null;
   return { _type: "where", expr, pos: expr.pos };
 }
 
-function parseExtend(parser: Parser, pos: number): Ast | null {
+function parseExtend(parser: Parser, pos: number): AstExtend | null {
   const name = expectToken(parser, TokenKind.Ident);
   if (!name) return null;
   if (!expectToken(parser, TokenKind.OpAssign)) return null;
@@ -307,7 +319,7 @@ function parseExtend(parser: Parser, pos: number): Ast | null {
   return { _type: "extend", name, expr, pos: pos };
 }
 
-function parseProject(parser: Parser, pos: number): Ast | null {
+function parseProject(parser: Parser, pos: number): AstProject | null {
   function parseNames(result: Token[]): Token[] {
     const ident = expectToken(parser, TokenKind.Ident);
     if (ident) {
@@ -326,7 +338,7 @@ function parseProject(parser: Parser, pos: number): Ast | null {
 }
 
 // | summarize <aggregation>, ... [by <column>, ...]
-function parseSummarize(parser: Parser, pos: number): Ast | null {
+function parseSummarize(parser: Parser, pos: number): AstSummarize | null {
   const aggregations: Aggregation[] = [];
   do {
     const aggrName = expectToken(parser, TokenKind.Ident);
@@ -349,24 +361,45 @@ function parseSummarize(parser: Parser, pos: number): Ast | null {
   return { _type: "summarize", aggregations, groupBy, pos };
 }
 
-function parseSourceOp(parser: Parser): Ast | null {
-  const ident = expectToken(parser, TokenKind.Ident);
-  if (!ident || !(["where", "extend", "project", "summarize"].includes(ident.value))) {
-    setParserError(parser, "Expected source operator 'where', 'extend', 'project' or 'summarize'");
+function parserOrderBy(parser: Parser, pos: number): AstOrderBy | null {
+  if (!expectIdent(parser, "by")) return null;
+
+  const names: Token[] = [];
+  do {
+    const columnName = expectToken(parser, TokenKind.Ident);
+    if (!columnName) return null;
+    names.push(columnName);
+  } while (acceptToken(parser, TokenKind.Comma))
+
+  const orderToken = acceptIdent(parser, "asc") || acceptIdent(parser, "desc");
+  if (!orderToken) {
+    setParserError(parser, "Expected 'asc' or 'desc'");
     return null;
   }
+  const order = orderToken.value === "asc" ? "asc" : "desc";
 
-  switch (ident.value) {
-    case "where":
-      return parseWhere(parser, ident.pos);
-    case "extend":
-      return parseExtend(parser, ident.pos);
-    case "project":
-      return parseProject(parser, ident.pos);
-    case "summarize":
-      return parseSummarize(parser, ident.pos);
+  return { _type: "orderBy", names, order, pos };
+}
+
+function parseSourceOp(parser: Parser): Ast | null {
+  const ident = expectToken(parser, TokenKind.Ident);
+  if (ident) {
+    switch (ident.value) {
+      case "where":
+        return parseWhere(parser, ident.pos);
+      case "extend":
+        return parseExtend(parser, ident.pos);
+      case "project":
+        return parseProject(parser, ident.pos);
+      case "summarize":
+        return parseSummarize(parser, ident.pos);
+      case "order":
+        return parserOrderBy(parser, ident.pos);
+    }
   }
-  throw Error("Unreachable");
+
+  setParserError(parser, "Expected source operator 'where', 'extend', 'project' or 'summarize' 'order by'");
+  return null;
 }
 
 function parseTopLevel(parser: Parser): Ast | null {
