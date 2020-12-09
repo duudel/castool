@@ -1,5 +1,5 @@
 import { BinaryOperator, UnaryOperator } from './types';
-import { Ast, AstCont, AstExpr, AstExtend, AstProject, AstWhere, AstTable } from './parser';
+import { Ast, AstCont, AstExpr, AstExtend, AstProject, AstWhere, AstSummarize, AstTable, Aggregation } from './parser';
 import {
   makeAdt,
   Value,
@@ -8,7 +8,6 @@ import {
   InputRow,
   TableDef,
   TableSource,
-  CompilationEnv,
   SemanticError,
   semError,
   DataTypeFrom,
@@ -17,6 +16,7 @@ import {
   UserFunctions,
   deconstructParam
 } from './common';
+import {group} from 'console';
 
 export type SemCheckEnv = {
   tables: {
@@ -52,12 +52,21 @@ export interface CheckedExpr<T extends Value> {
   dataType: DataTypeFrom<T>;
 }
 
+export interface CheckedAggr<T extends Value> {
+  name: string;
+  aggregate: (accum: T, row: InputRow) => T;
+  initialValue: T;
+  finalPass?: (accum: T, N: number) => Value;
+  dataType: DataTypeFrom<T>;
+}
+
 export type CheckedQuery = makeAdt<{
   table: { name: string, tableDef: TableDef },
   cont: { source: CheckedQuery, op: CheckedOpQuery, tableDef: TableDef }
   where: { expr: CheckedExpr<boolean>, tableDef: TableDef },
   project: { names: string[], tableDef: TableDef },
   extend: { name: string, expr: CheckedExpr<Value>, tableDef: TableDef },
+  summarize: { aggregations: CheckedAggr<Value>[], groupBy: string[], tableDef: TableDef },
 }>;
 
 export type CheckedTable = CheckedQuery & { _type: "table" };
@@ -65,7 +74,8 @@ export type CheckedCont = CheckedQuery & { _type: "cont" };
 export type CheckedWhere = CheckedQuery & { _type: "where" };
 export type CheckedProject = CheckedQuery & { _type: "project" };
 export type CheckedExtend = CheckedQuery & { _type: "extend" };
-export type CheckedOpQuery = CheckedWhere | CheckedProject | CheckedExtend;
+export type CheckedSummarize = CheckedQuery & { _type: "summarize" };
+export type CheckedOpQuery = CheckedWhere | CheckedProject | CheckedExtend | CheckedSummarize;
 
 interface SemCheckSuccess<R> {
   success: true;
@@ -416,6 +426,95 @@ function semCheckWhere(ctx: SemCheckContext, source: TableDef, op: AstWhere): Se
   return semSuccessQuery(where);
 }
 
+function semCheckAggregation(ctx: SemCheckContext, source: TableDef, aggr: Aggregation): SemCheckResult<CheckedAggr<Value>> {
+  const funcName = aggr.expr.functionName.value;
+  const funcDef = findFunctionDef(ctx, funcName);
+  if (!funcDef) {
+    return semFailure(ctx, aggr.expr, `No such function as '${funcName}' found`);
+  }
+  if (funcDef.initialValue === undefined) {
+    return semFailure(ctx, aggr.expr, `Function '${funcName}' cannot be used as aggregation function, as it does not have initial value defined`);
+  }
+  const params = funcDef.parameters;
+  if (funcDef.parameters.length === 0) {
+    return semFailure(ctx, aggr.expr, `Aggregation function must have at least the accumulator parameter, '${funcName}' has none`)
+  }
+  const [accumName, accumType] = deconstructParam(funcDef.parameters[0]);
+  if (funcDef.returnType !== accumType) {
+    return semFailure(
+      ctx,
+      aggr.expr,
+      `Invalid aggregation function '${funcName}'. Accumulator '${accumName}' type is '${accumType}' and return type is '${funcDef.returnType}'`
+    );
+  }
+
+  // func(b, c)  is actually  func(acc, b, c)
+  if (aggr.expr.args.length + 1 !== params.length) {
+    return semFailure(ctx, aggr.expr, `Aggregation function '${funcName}' takes ${params.length - 1} arguments, ${aggr.expr.args.length} were given`);
+  }
+
+  const evals: ((row: InputRow) => Value)[] = [];
+  for (let argI = 0; argI < aggr.expr.args.length; argI++) {
+    const arg = aggr.expr.args[argI];
+    const argResult = semCheckExpr(ctx, source, arg);
+    if (!argResult.success) return argResult;
+
+    const [paramName, paramDataType] = deconstructParam(params[argI + 1]);
+    if (argResult.result.dataType !== paramDataType) {
+      return semFailure(ctx, arg, `Function '${funcName}' parameter '${paramName}' has type ${paramDataType}, cannot pass argument of type ${argResult.result.dataType}`);
+    }
+    evals.push(argResult.result.evaluate);
+  }
+
+  const aggregate = (accum: Value, row: InputRow) => {
+    const args = [accum].concat(evals.map(evalArg => evalArg(row)));
+    return funcDef.func.apply(null, args);
+  };
+  const checkedAggr: CheckedAggr<Value> = {
+    name: aggr.name.value,
+    aggregate,
+    initialValue: funcDef.initialValue,
+    finalPass: funcDef.finalPass,
+    dataType: funcDef.returnType
+  };
+  return semSuccess(checkedAggr);
+}
+
+function semCheckSummarize(ctx: SemCheckContext, source: TableDef, op: AstSummarize): SemCheckResult<CheckedSummarize> {
+  const aggregationResults: [CheckedAggr<Value> | null, SemCheckFailure | null][] = op.aggregations.map(aggr => {
+    // Check if aggr.name is not reserved or invalid - is used in group by? is a function name?
+
+    const aggrResult = semCheckAggregation(ctx, source, aggr);
+    if (!aggrResult.success) return [null, aggrResult];
+
+    return [aggrResult.result, null];
+  });
+
+  const aggrErrors: SemCheckFailure[] = aggregationResults.map(([, error]) => error).filter(v => v !== null) as SemCheckFailure[];
+  if (aggrErrors.length > 0) return aggrErrors[0];
+
+  const aggregations: CheckedAggr<Value>[] = aggregationResults.map(([aggr]) => aggr).filter(v => v !== null) as CheckedAggr<Value>[];
+
+  const groupBy = op.groupBy.map(column => column.value);
+  const columnNotFound = groupBy.reduce(
+    (error, columnName) => source.columns.find(([name]) => name === columnName) ? error : columnName,
+    null as string | null
+  );
+  if (columnNotFound) {
+    return semFailure(ctx, op, `No such column as '${columnNotFound}' found`);
+  }
+
+  const groupByColumns: [string, DataType][] = source.columns.filter(([name]) => groupBy.includes(name));
+  const aggrColumns: [string, DataType][] = aggregations.map(aggr => [aggr.name, aggr.dataType]);
+
+  const tableDef: TableDef = {
+    columns: aggrColumns.concat(groupByColumns)
+  };
+
+  const summarize: CheckedSummarize = { _type: "summarize", tableDef, aggregations, groupBy };
+  return semSuccessQuery(summarize);
+}
+
 function semCheckTopLevelOp(ctx: SemCheckContext, source: TableDef, op: Ast): SemCheckResult<CheckedOpQuery> {
   switch (op._type) {
     case "project":
@@ -424,6 +523,8 @@ function semCheckTopLevelOp(ctx: SemCheckContext, source: TableDef, op: Ast): Se
       return semCheckExtend(ctx, source, op);
     case "where":
       return semCheckWhere(ctx, source, op);
+    case "summarize":
+      return semCheckSummarize(ctx, source, op);
   }
   throw Error("Unreachable");
 }

@@ -2,12 +2,18 @@ import { UnaryOperator, BinaryOperator } from './types';
 import { TokenKind, Token, tokenize, LexResult } from './lexer';
 import { makeAdt, ParseError, parseError, Result } from './common';
 
+export type Aggregation = {
+  name: Token;
+  expr: AstExpr & { _type: "functionCall" };
+};
+
 export type Ast = makeAdt<{
   table: { name: Token, pos: number },
   cont: { source: Ast, op: Ast, pos: number }
   where: { expr: AstExpr, pos: number },
   project: { names: Token[], pos: number },
   extend: { name: Token, expr: AstExpr, pos: number },
+  summarize: { aggregations: Aggregation[], groupBy: Token[], pos: number },
   
   column: { name: Token, pos: number },
   nullLit: { pos: number },
@@ -26,6 +32,7 @@ export type AstCont = Ast & { _type: "cont" };
 export type AstWhere = Ast & { _type: "where" };
 export type AstProject = Ast & { _type: "project" };
 export type AstExtend = Ast & { _type: "extend" };
+export type AstSummarize = Ast & { _type: "summarize" };
 export type AstExpr = Ast & { _type: "column" | "nullLit" | "trueLit" | "falseLit" | "stringLit" | "numberLit" | "dateLit" | "unaryOp" | "binaryOp" | "functionCall" };
 
 export interface Parser {
@@ -72,6 +79,17 @@ function acceptAnyToken<K extends TokenKind, T extends Token & { kind: K }>(pars
     const token = currentToken(parser);
     advanceParser(parser);
     return token as T;
+  }
+  return null;
+}
+
+function acceptIdent(parser: Parser, value: string): Token | null {
+  if (hasTokens(parser)) {
+    const token = currentToken(parser);
+    if (token.kind === TokenKind.Ident && token.value === value) {
+      advanceParser(parser);
+      return token;
+    }
   }
   return null;
 }
@@ -307,10 +325,34 @@ function parseProject(parser: Parser, pos: number): Ast | null {
   return { _type: "project", names, pos };
 }
 
+// | summarize <aggregation>, ... [by <column>, ...]
+function parseSummarize(parser: Parser, pos: number): Ast | null {
+  const aggregations: Aggregation[] = [];
+  do {
+    const aggrName = expectToken(parser, TokenKind.Ident);
+    if (!aggrName) return null;
+    if (!expectToken(parser, TokenKind.OpAssign)) return null;
+    const expr = parseExpression(parser);
+    if (!expr) return null;
+    if (expr._type !== "functionCall") return null;
+    aggregations.push({ name: aggrName, expr });
+  } while (acceptToken(parser, TokenKind.Comma))
+
+  const groupBy: Token[] = [];
+  if (acceptIdent(parser, "by")) {
+    do {
+      const columnName = expectToken(parser, TokenKind.Ident);
+      if (!columnName) return null;
+      groupBy.push(columnName);
+    } while (acceptToken(parser, TokenKind.Comma))
+  }
+  return { _type: "summarize", aggregations, groupBy, pos };
+}
+
 function parseSourceOp(parser: Parser): Ast | null {
   const ident = expectToken(parser, TokenKind.Ident);
-  if (!ident || (ident.value !== "where" && ident.value !== "extend" && ident.value !== "project")) {
-    setParserError(parser, "Expected source operator 'where', 'extend', or 'project'");
+  if (!ident || !(["where", "extend", "project", "summarize"].includes(ident.value))) {
+    setParserError(parser, "Expected source operator 'where', 'extend', 'project' or 'summarize'");
     return null;
   }
 
@@ -321,7 +363,10 @@ function parseSourceOp(parser: Parser): Ast | null {
       return parseExtend(parser, ident.pos);
     case "project":
       return parseProject(parser, ident.pos);
+    case "summarize":
+      return parseSummarize(parser, ident.pos);
   }
+  throw Error("Unreachable");
 }
 
 function parseTopLevel(parser: Parser): Ast | null {

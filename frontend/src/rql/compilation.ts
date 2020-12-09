@@ -1,7 +1,8 @@
+import * as rxjs from 'rxjs';
 import * as rxop from 'rxjs/operators';
 
-import { InputRow, TableDef, FunctionDef, CompilationEnv, RowsObs } from './common';
-import { CheckedQuery, CheckedCont, CheckedOpQuery, CheckedTable, CheckedExtend, CheckedProject, CheckedWhere } from './semcheck';
+import { Value, InputRow, TableDef, FunctionDef, CompilationEnv, RowsObs } from './common';
+import { CheckedQuery, CheckedCont, CheckedOpQuery, CheckedTable, CheckedExtend, CheckedProject, CheckedWhere, CheckedSummarize, CheckedAggr } from './semcheck';
 
 type Env = CompilationEnv;
 export type CompilationResult = (env: Env) => RowsObs;
@@ -53,6 +54,89 @@ function compileWhere(source: RowsObs, q: CheckedWhere): CompilationResult {
   };
 }
 
+function compileSummarize(source: RowsObs, q: CheckedSummarize): CompilationResult {
+  const aggregations$ = rxjs.from(q.aggregations);
+
+  const group = rxop.groupBy((row: InputRow) => {
+    const key = q.groupBy.reduce((acc, column) => {
+      acc = acc + "_" + row[column];
+      return acc;
+    }, "");
+    console.log("Key", key);
+    return key;
+  });
+
+  const aggregate = (aggr: CheckedAggr<Value>) => {
+    function aggregateValuesAndN([acc, N]: [Value, number], row: InputRow): [Value, number] {
+      console.log("Aggr ", aggr.name, acc, N);
+      return [aggr.aggregate(acc, row), N + 1];
+    }
+    return rxop.reduce(aggregateValuesAndN, [aggr.initialValue, 0]);
+  };
+
+  const mapToAggregateColumn = (aggr: CheckedAggr<Value>) => {
+    return rxop.map(([value, N]: [Value, number]) => {
+      if (aggr.finalPass) {
+        return { name: aggr.name, value: aggr.finalPass(value, N) };
+      } else {
+        return { name: aggr.name, value };
+      }
+    })
+  };
+
+  const logOp = <T>(tag: string) => rxop.map((x: T) => { console.log(tag, ":", x); return x; });
+
+  const withGroupBy = (): RowsObs => source.pipe(
+    //logOp("INPUT"),
+    group,
+    rxop.map(grouped => {
+      const aggregates = aggregations$.pipe(
+        rxop.mergeMap((aggr) => grouped.pipe(
+          aggregate(aggr), mapToAggregateColumn(aggr),
+        )),
+        rxop.reduce((acc, { name, value }) => {
+          acc[name] = value;
+          return acc;
+        }, {} as InputRow),
+      );
+      return rxjs.zip(
+        grouped,
+        aggregates
+      ).pipe(
+        rxop.map(([row, aggregateColumns]) => {
+          return { ...row, ...aggregateColumns };
+        })
+      );
+    }),
+    rxop.mergeAll() 
+  );
+
+  const noGrouping = (): RowsObs => aggregations$.pipe(
+    rxop.mergeMap((aggr) => {
+      return source.pipe(
+        aggregate(aggr),
+        mapToAggregateColumn(aggr),
+      );
+    }),
+    rxop.reduce((acc, { name, value }) => {
+      acc[name] = value;
+      return acc;
+    }, {} as InputRow)
+  );
+
+  if (q.groupBy.length === 0) {
+    const result = noGrouping();
+    return (env: Env) => {
+      return result;
+    }
+  } else {
+    const result = withGroupBy();
+    return (env: Env) => {
+      return result;
+    }
+  }
+}
+
 function compileTopLevelOp(source: RowsObs, q: CheckedOpQuery): CompilationResult {
   switch (q._type) {
     case "project":
@@ -61,6 +145,8 @@ function compileTopLevelOp(source: RowsObs, q: CheckedOpQuery): CompilationResul
       return compileExtend(source, q);
     case "where":
       return compileWhere(source, q);
+    case "summarize":
+      return compileSummarize(source, q);
   }
 }
 

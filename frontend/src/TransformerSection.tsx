@@ -63,31 +63,33 @@ function ResultsContainer(props: ResultsContainerProps) {
           )}
         </Row>
       </thead>
-      {resultsOnPage.map((item, i) => {
-        return (
-          <Row key={"row-" + (pageStart + i)}>
-            <RowNumber>{pageStart + i}</RowNumber>
-            {schema.columns.map(([columnName, columnDataType]) => {
-              const value = item[columnName];
-              if (value === undefined) {
-                console.log("Undefined: ", columnName, item);
-                return <Cell key={columnName}>Undefined</Cell>;
-              }
-              switch (columnDataType) {
-                case "object":
-                  return (
-                    <Cell key={columnName}>
-                      <JsonSyntaxHighlight value={JSON.stringify(value, null, 2)}/>
-                    </Cell>
-                  );
-              }
-              return <Cell key={columnName}>
-                {value === null ? "null" : value.toString()}
-              </Cell>;
-            })}
-          </Row>
-        );
-      })}
+      <tbody>
+        {resultsOnPage.map((item, i) => {
+          return (
+            <Row key={"row-" + (pageStart + i)}>
+              <RowNumber>{pageStart + i}</RowNumber>
+              {schema.columns.map(([columnName, columnDataType]) => {
+                const value = item[columnName];
+                if (value === undefined) {
+                  //console.log("Undefined: ", columnName, item);
+                  return <Cell key={columnName}>Undefined</Cell>;
+                }
+                switch (columnDataType) {
+                  case "object":
+                    return (
+                      <Cell key={columnName}>
+                        <JsonSyntaxHighlight value={JSON.stringify(value, null, 2)}/>
+                      </Cell>
+                    );
+                }
+                return <Cell key={columnName}>
+                  {value === null ? "null" : value.toString()}
+                </Cell>;
+              })}
+            </Row>
+          );
+        })}
+      </tbody>
     </ResultsTable>
   </ResultsTableContainer>
   ) : null;

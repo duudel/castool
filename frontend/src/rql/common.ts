@@ -41,6 +41,8 @@ export type FunctionDef = {
   parameters: FunctionParam[];
   returnType: DataType;
   func: (...args: any[]) => Value;
+  initialValue?: Value;
+  finalPass?: (acc: any, N: number) => any;
 };
 
 export type RowsObs = rxjs.Observable<InputRow>;
@@ -48,7 +50,7 @@ export type RowsObs = rxjs.Observable<InputRow>;
 export type TableSource = {
   tableDef: TableDef;
   rows: RowsObs;
-}
+};
 
 export type UserFunctions = { [name: string]: FunctionDef };
 export type BuiltinFunctions = { [name: string]: FunctionDef };

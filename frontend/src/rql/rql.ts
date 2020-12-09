@@ -26,6 +26,11 @@ const builtinFunctions: BuiltinFunctions = {
     returnType: "number",
     func: (str: string): number => parseFloat(str)
   },
+  length: {
+    parameters: [{str: "string"}],
+    returnType: "number",
+    func: (str: string): number => str.length
+  },
   starts_with: {
     parameters: [{str: "string"}, {search: "string"}],
     returnType: "boolean",
@@ -36,11 +41,19 @@ const builtinFunctions: BuiltinFunctions = {
     returnType: "boolean",
     func: (str: string, search: string): boolean => str.endsWith(search)
   },
+  count: {
+    parameters: [{acc: "number"}],
+    returnType: "number",
+    func: (acc: number): number => acc + 1,
+    initialValue: 0,
+  },
   avg: {
     parameters: [{acc: "number"}, {x: "number"}],
     returnType: "number",
-    func: (acc: number, x: number): number => acc + x
-  }
+    func: (acc: number, x: number): number => acc + x,
+    finalPass: (acc: number, N: number): number => acc / N,
+    initialValue: 0.0,
+  },
 };
 
 export function compile(input: string, env: CompilationEnv): CompileResult {
