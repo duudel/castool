@@ -92,10 +92,7 @@ class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Eff
 }
 
 object CasService {
-  def apply[R <: AppEnv](): CasService[R] = {
-    // Test.doIt()
-    new CasService[R]()
-  }
+  def apply[R <: AppEnv](): CasService[R] = new CasService[R]()
 
   import castool.configuration._
   import zio.blocking.Blocking
