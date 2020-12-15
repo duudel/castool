@@ -1,53 +1,6 @@
 package castool.rql
 
-sealed trait Token {
-  def pos: Int
-}
-
-object Token {
-  // identifiers
-  final case class Ident(value: String, pos: Int) extends Token
-  // literals
-  final case class StringLit(value: String, pos: Int) extends Token
-  final case class NumberLit(value: Double, pos: Int) extends Token // TODO: support integer and float numbers
-  final case class DateLit(value: String, pos: Int) extends Token
-  final case class NullLit(pos: Int) extends Token
-  final case class TrueLit(pos: Int) extends Token
-  final case class FalseLit(pos: Int) extends Token
-  // special
-  final case class Bar(pos: Int) extends Token
-  final case class LParen(pos: Int) extends Token
-  final case class RParen(pos: Int) extends Token
-  final case class Comma(pos: Int) extends Token
-  // operators
-  final case class OpAssign(pos: Int) extends Token
-  final case class OpNot(pos: Int) extends Token
-  final case class OpPlus(pos: Int) extends Token
-  final case class OpMinus(pos: Int) extends Token
-  final case class OpMultiply(pos: Int) extends Token
-  final case class OpDivide(pos: Int) extends Token
-  final case class OpEqual(pos: Int) extends Token
-  final case class OpNotEqual(pos: Int) extends Token
-  final case class OpLess(pos: Int) extends Token
-  final case class OpLessEq(pos: Int) extends Token
-  final case class OpGreater(pos: Int) extends Token
-  final case class OpGreaterEq(pos: Int) extends Token
-  final case class OpContains(pos: Int) extends Token
-  final case class OpNotContains(pos: Int) extends Token
-  final case class OpAnd(pos: Int) extends Token
-  final case class OpOr(pos: Int) extends Token
-}
-
-sealed trait LexerState {
-  def isValid: Boolean
-  def hasInput: Boolean
-}
-
 final case class InputPos(input: String, line: Int, column: Int)
-
-sealed trait LexResult
-final case class LexSuccess(tokens: Iterable[Token]) extends LexResult
-final case class LexFailure(error: String, pos: InputPos) extends LexResult
 
 object Lexer {
 
@@ -62,16 +15,19 @@ object Lexer {
     def substringFrom(startPos: Int): String = input.substring(startPos, pos)
   }
 
-  type State = LexerState
+  sealed trait State {
+    def isValid: Boolean
+    def hasInput: Boolean
+  }
 
-  final case class Valid(input: Input, tokens: Vector[Token]) extends LexerState {
+  final case class Valid(input: Input, tokens: Vector[Token]) extends State {
     override def isValid: Boolean = true
     override def hasInput: Boolean = input.hasInput()
     def advance(): Valid = copy(input = input.advance())
     def emit(token: Token): Valid = copy(tokens = tokens :+ token)
     def reject: Reject = Reject(this)
   }
-  final case class Reject(prev: Valid) extends LexerState {
+  final case class Reject(prev: Valid) extends State {
     override def isValid: Boolean = false
     override def hasInput: Boolean = false
   }
@@ -289,20 +245,26 @@ object Lexer {
   )
 
   val tokens = choice(
-    singleLineComment, multiLineComment, skipWhitespace,
-    ident, numberLit, stringLit, bar, lparen, rparen, op,
+    singleLineComment, multiLineComment, skipWhitespace, op,
+    ident, numberLit, stringLit, bar, lparen, rparen,
   ).*
+
+  sealed trait Result
+  final case class Success(tokens: Iterable[Token]) extends Result
+  final case class Failure(error: String, pos: Int) extends Result
 
   def valid(input: String) = Valid(Input(input, pos = 0), Vector.empty)
 
-  def lex(input: String) = {
+  def lex(input: String): Result = {
     val state: Valid = valid(input)
-    lexState(state)
+    lexState(state) match {
+      case Valid(_, tokens) => Success(tokens)
+      case Reject(prev) => Failure("Invalid token", prev.input.pos)
+    }
   }
 
   def lexState(state: Valid): State = {
-    println(tokens.accept(state))
-    state
+    tokens.accept(state)
   }
 
   def main() {

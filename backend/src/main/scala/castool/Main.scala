@@ -10,11 +10,12 @@ import zio.clock.Clock
 import zio.interop.catz._
 import zio.interop.catz.implicits._
 
-import castool.rql.Lexer
+import castool.rql.{Lexer, Parser}
 
 object CasTool extends App {
   def run(args: List[String]) = {
     Lexer.main()
+    Parser.main()
     ZIO.succeed(zio.ExitCode.success)
     //program.exitCode
   }
