@@ -8,6 +8,8 @@ lazy val root = project.in(file("."))
       "org.typelevel"                %% "cats-effect"           % Versions.cats,
       "dev.zio"                      %% "zio"                   % Versions.zio,
       "dev.zio"                      %% "zio-streams"           % Versions.zio,
+      "dev.zio"                      %% "zio-test"              % Versions.zio % "test",
+      "dev.zio"                      %% "zio-test-sbt"          % Versions.zio % "test",
       "dev.zio"                      %% "zio-logging"           % Versions.zioLogging,
       "dev.zio"                      %% "zio-interop-cats"      % Versions.zioInteropCats,
       "org.http4s"                   %% "http4s-blaze-server"   % Versions.http4s,
@@ -20,4 +22,6 @@ lazy val root = project.in(file("."))
       "com.datastax.oss"             % "java-driver-core"       % Versions.cassandraDriver,
     ),
   )
+
+  testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 

@@ -5,7 +5,7 @@ import scala.reflect.ClassTag
 object Parser {
   sealed trait Result
 
-  final case class Success(ast: Ast) extends Result
+  final case class Success(ast: Ast.Source) extends Result
   final case class Failure(error: String, pos: Int) extends Result
 
   case class Input(current: Option[Token], tokens: Iterable[Token]) {
@@ -137,6 +137,20 @@ object Parser {
       })
     }
 
+    def acceptName: Parser[NameAndToken] = {
+      accept[Token.Ident].andThen(identSt => {
+        identSt match {
+          case St.Ok(input, result) =>
+            Name.fromString(result.value) match {
+              case Right(name) => St.Ok(input, NameAndToken(name, result))
+              case Left(error) => St.Nok(input, error)
+            }
+          case nok: St.Nok => St.Nok(nok.input, s"Expected name")
+          case err: St.Error => St.Error(err.input, s"Expected name")
+        }
+      })
+    }
+
     def orElse[A <: Token, B <: Token](a: Parser[A])(b: Parser[B]): Parser[Token] = (st: St[Any]) => a(st) match {
       case ok: St.Ok[_] => ok
       case nok => b(st)
@@ -181,10 +195,10 @@ object Parser {
       val results = scala.collection.mutable.Buffer.empty[A]
       var s = p(st)
       while (s.isOk) {
-        println(s"* $s")
+        //println(s"* $s")
         results += s.result
         s = separator(s).map(_.asInstanceOf[A])
-        println(s"* $s")
+        //println(s"* $s")
         if (s.isOk) {
           s = p(s)
         }
@@ -198,10 +212,10 @@ object Parser {
       val results = scala.collection.mutable.Buffer.empty[A]
       var s = p(st)
       while (s.isOk) {
-        println(s"* $s")
+        //println(s"* $s")
         results += s.result
         s = sep2(s).map(_.asInstanceOf[A])
-        println(s"* $s")
+        //println(s"* $s")
         if (s.isOk) {
           s = p(s)
         }
@@ -209,7 +223,7 @@ object Parser {
       St.Ok(s.input, results.toSeq)
     })
 
-    def logical_expr[OpTok <: Token.LogicalOp: ClassTag](subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] = 
+    def logical_expr[OpTok <: Token.LogicalOp: ClassTag](subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
       (subExpr ~ many(accept[OpTok] ~ subExpr)).map {
         case (e0, Nil) =>
           e0
@@ -256,10 +270,8 @@ object Parser {
     ](subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
       (subExpr ~ many(any(accept[T1], accept[T2]) ~! subExpr)).map {
         case (e0, Nil) =>
-          println("left: " + e0)
           e0
         case (left, (opToken, right) :: rest) =>
-          println("left: " + left + "; " + (opToken, right) + ":: " + rest)
           def build(left: Ast.Expr, opToken: Token.BinOpToken, right: Ast.Expr, rest: Seq[(Token.BinOpToken, Ast.Expr)]): Ast.Expr = {
             val op = opToken.binaryOp
             rest match {
@@ -275,7 +287,7 @@ object Parser {
       }
 
     def bin_expr[T <: Token.BinOpToken: ClassTag](subExpr: Parser[Ast.Expr], opParser: Parser[T]): Parser[Ast.Expr] =
-      (subExpr ~ many(opParser ~ subExpr)).map {
+      (subExpr ~ many(opParser ~! subExpr)).map {
         case (e0, Nil) =>
           e0
         case (left, (opToken, right) :: rest) =>
@@ -298,15 +310,15 @@ object Parser {
   object G {
     import P._
 
-    lazy val column_expr: Parser[Ast.Column] = accept[Token.Ident].map(ident => Ast.Column(ident, ident.pos))
+    lazy val column_expr: Parser[Ast.Column] = acceptName.map(nameAndTok => Ast.Column(nameAndTok.name, nameAndTok.tok.pos))
     lazy val null_lit_expr: Parser[Ast.NullLit] = acceptIdent("null").map(ident => Ast.NullLit(ident.pos))
     lazy val true_lit_expr: Parser[Ast.TrueLit] = acceptIdent("true").map(ident => Ast.TrueLit(ident.pos))
     lazy val false_lit_expr: Parser[Ast.FalseLit] = acceptIdent("false").map(ident => Ast.FalseLit(ident.pos))
-    lazy val number_lit_expr: Parser[Ast.NumberLit] = accept[Token.NumberLit].map(lit => Ast.NumberLit(lit, lit.pos))
-    lazy val string_lit_expr: Parser[Ast.StringLit] = accept[Token.StringLit].map(lit => Ast.StringLit(lit, lit.pos))
+    lazy val number_lit_expr: Parser[Ast.NumberLit] = accept[Token.NumberLit].map(lit => Ast.NumberLit(lit))
+    lazy val string_lit_expr: Parser[Ast.StringLit] = accept[Token.StringLit].map(lit => Ast.StringLit(lit))
     lazy val funcCall_expr: Parser[Ast.FunctionCall] =
-      ((accept[Token.Ident] <~ accept[Token.LParen]) ~ ((st) => expr(st)).*(accept[Token.Comma]) <~ accept[Token.RParen]).map {
-        case (ident, args) => Ast.FunctionCall(functionName = ident, args = args, pos = ident.pos)
+      ((acceptName <~ accept[Token.LParen]) ~ ((st) => expr(st)).*(accept[Token.Comma]) <~ accept[Token.RParen]).map {
+        case (nameAndTok, args) => Ast.FunctionCall(functionName = nameAndTok.name, args = args, pos = nameAndTok.tok.pos)
       }
     lazy val term_expr: Parser[_ <: Ast.Expr] = any(
       funcCall_expr, column_expr, null_lit_expr, true_lit_expr, false_lit_expr, number_lit_expr, string_lit_expr
@@ -316,42 +328,44 @@ object Parser {
     }
     lazy val mult_expr: Parser[_ <: Ast.Expr] = arith2_expr[Token.OpMultiply, Token.OpDivide](any(unary_expr, term_expr))
     lazy val sum_expr: Parser[_ <: Ast.Expr] = arith2_expr[Token.OpPlus, Token.OpMinus](mult_expr)
-    lazy val comp_expr: Parser[_ <: Ast.Expr] = bin_expr(mult_expr, any(accept[Token.OpEqual], accept[Token.OpNotEqual]))
+    lazy val comp_ltgt_expr: Parser[_ <: Ast.Expr] = bin_expr(sum_expr, any(
+      accept[Token.OpLess], accept[Token.OpLessEq], accept[Token.OpGreater], accept[Token.OpGreaterEq])
+    )
+    lazy val comp_expr: Parser[_ <: Ast.Expr] = bin_expr(comp_ltgt_expr, any(accept[Token.OpEqual], accept[Token.OpNotEqual]))
     lazy val string_expr: Parser[_ <: Ast.Expr] = bin2_expr[Token.OpContains, Token.OpNotContains](comp_expr)
     lazy val logical_and_expr: Parser[_ <: Ast.Expr] = logical_expr[Token.OpAnd](string_expr)
     lazy val logical_or_expr: Parser[_ <: Ast.Expr] = logical_expr[Token.OpOr](logical_and_expr)
     lazy val expr: Parser[_ <: Ast.Expr] = logical_or_expr
 
-    lazy val table: Parser[Ast.Table] = accept[Token.Ident].map(ident => Ast.Table(name = ident, pos = ident.pos))
+    lazy val table: Parser[Ast.Table] = acceptName.map(nameAndTok => Ast.Table(name = nameAndTok.name, tok = nameAndTok.tok))
     lazy val where: Parser[Ast.Where] = (acceptIdent("where") ~! expr).map { case (w, expr) => Ast.Where(expr, w.pos) }
-    lazy val extend: Parser[Ast.Extend] = (acceptIdent("extend") ~! accept[Token.Ident] ~ (accept[Token.OpAssign] ~> expr)).map {
-      case ((e, ident), expr) => Ast.Extend(name = ident, expr = expr, pos = e.pos)
+    lazy val extend: Parser[Ast.Extend] = (acceptIdent("extend") ~! acceptName ~ (accept[Token.OpAssign] ~> expr)).map {
+      case ((e, nameAndTok), expr) => Ast.Extend(name = nameAndTok, expr = expr, pos = e.pos)
     }
-    lazy val project: Parser[Ast.Project] = (acceptIdent("project") ~! accept[Token.Ident].*(accept[Token.Comma])).map {
+    lazy val project: Parser[Ast.Project] = (acceptIdent("project") ~! acceptName.*(accept[Token.Comma])).map {
       case (p, names) => Ast.Project(names, p.pos)
     }
     lazy val orderBy: Parser[Ast.OrderBy] = ((acceptIdent("order") <~ acceptIdent("by"))
-      ~! accept[Token.Ident].*(accept[Token.Comma])
+      ~! acceptName.*(accept[Token.Comma])
       ~ any(acceptIdent("asc"), acceptIdent("desc"))).map { case ((o, names), orderIdent) =>
         val order = if (orderIdent.value == "asc") Order.Asc else Order.Desc
         Ast.OrderBy(names, order, pos = o.pos)
       }
       lazy val summarize: Parser[Ast.Summarize] = (acceptIdent("summarize")
-        ~! (accept[Token.Ident] ~ (accept[Token.OpAssign] ~> funcCall_expr)).*(accept[Token.Comma])
-        ~? (acceptIdent("by") ~ accept[Token.Ident].*(accept[Token.Comma]))).map {
+        ~! (acceptName ~ (accept[Token.OpAssign] ~> funcCall_expr)).*(accept[Token.Comma])
+        ~? (acceptIdent("by") ~ acceptName.*(accept[Token.Comma]))).map {
           case ((s, aggrs), groupByOpt) =>
-            val aggregations = aggrs.map { case (name, aggr) => Ast.Aggregation(name, aggr) }
+            val aggregations = aggrs.map { case (nameAndTok, aggr) => Ast.Aggregation(nameAndTok, aggr) }
             val groupBy = groupByOpt.map(_._2).getOrElse(Seq.empty)
             Ast.Summarize(aggregations, groupBy, pos = s.pos)
         }
-      lazy val toplevel: Parser[Ast] = (table
+      lazy val toplevel: Parser[Ast.Source] = (table
         ~ any[Ast.TopLevelOp](where, extend, project, orderBy, summarize).*(accept[Token.Bar], accept[Token.Bar])).map {
           case (table, Nil) => table
           case (table, ops) => ops.foldLeft[Ast.Source](table) {
-            case (acc, op) => Ast.Cont(acc, op, pos = op.pos)
+            case (acc, op) => Ast.Cont(acc, op)
           }
       }
-  
   }
 
   def parseWith[A](tokens: Iterable[Token], parser: Parser[A]): St[A] = {
@@ -360,8 +374,9 @@ object Parser {
   }
 
   def parse[A](tokens: Iterable[Token]): Result = {
-    parseWith(tokens, G.expr) match {
-      case St.Ok(input, ast) => Success(ast)
+    parseWith(tokens, G.toplevel) match {
+      case St.Ok(Input(None, _), ast) => Success(ast)
+      case St.Ok(Input(Some(current), _), ast) => Failure("Unrecognized input after succesfully parsed query: " + current.display, current.pos)
       case St.Nok(input, message) => Failure(message, if (input.hasInput) input.current.get.pos else -1)
       case St.Error(input, message) => Failure(message, if (input.hasInput) input.current.get.pos else -1)
     }
@@ -384,8 +399,8 @@ object Parser {
 
     Lexer.lex("""
       Rows | where persistence_id contains "kala"
-      //| extend json=as_json(event)
-      //| summarize cnt=count() by persistence_id
+      | extend json=as_json(event)
+      | summarize cnt=count() by persistence_id
               """) match {
       case Lexer.Success(tokens) =>
         println("\n" + tokens)

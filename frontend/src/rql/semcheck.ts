@@ -16,7 +16,6 @@ import {
   UserFunctions,
   deconstructParam
 } from './common';
-import {group} from 'console';
 
 export type SemCheckEnv = {
   tables: {
