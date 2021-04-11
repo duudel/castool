@@ -10,7 +10,7 @@ import zio.test.environment._
 import Name.NameInterpolator
 
 object CompilerSpec {
-  val testEnv = new Execution.Env {
+  def testEnv = new Execution.Env {
     def table(name: Name): Option[Execution.Stream] =
       if (name == n"TestTable")
         Some(ZStream(
@@ -20,18 +20,36 @@ object CompilerSpec {
       else None
   }
 
-  val testCompilationEnv = new Compiler.Env {
-    def tableDef(name: Name): SemCheck.Result[SourceDef] = {
-      if (name == n"TestTable")
-        zio.ZIO.succeed(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
-      else zio.ZIO.fail(SemCheck.Error(s"No such table as '${name.n}'", Location(0)))
+  val testCompilationEnv = {
+    val aggregations = Map(
+      n"count" -> AggregationDef(
+        evaluate = Eval((acc: Null.type) => Null),
+        returnType = ValueType.Num,
+        parameters = Map.empty,
+        initialValue = Null,
+        finalPhase = (acc, n) => n
+      )
+    )
+    new Compiler.Env {
+      def tableDef(name: Name): SemCheck.Result[SourceDef] = {
+        if (name == n"TestTable")
+          zio.ZIO.succeed(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
+        else zio.ZIO.fail(SemCheck.Error(s"No such table as '${name.n}'", Location(0)))
+      }
+      def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] =
+        if (name == n"not")
+          zio.ZIO.succeed(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Map("b" -> ValueType.Bool), ValueType.Bool))
+        else zio.ZIO.fail(SemCheck.Error(s"No such function as '${name.n}'", Location(0)))
+      def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] =
+        zio.ZIO
+          .fromOption(aggregations.get(name))
+          .mapError(_ => SemCheck.Error(s"No such aggregation as '${name.n}'", Location(0)))
     }
-    def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] =
-      if (name == n"not")
-        zio.ZIO.succeed(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Map("b" -> ValueType.Bool), ValueType.Bool))
-      else zio.ZIO.fail(SemCheck.Error(s"No such function as '${name.n}'", Location(0)))
-    def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] = ???
   }
+
+  type Layer = zio.console.Console with Execution.EnvService
+  val execEnvLayer: ZLayer[Any, Any, Execution.EnvService] = Execution.live(testEnv)
+  val layer0: ZLayer[Any, Any, Layer] = zio.console.Console.live ++ execEnvLayer
 
   def testCompilation(s: String): IO[Compiler.Error, Compiled.Source] = {
     val result = Compiler.compileQuery(s)
@@ -53,9 +71,6 @@ object CompilerSpec {
           zio.console.putStrLn(input.values.toString())
         }
       } yield assert(result)(isSuccess)
-      type Layer = zio.console.Console with Execution.EnvService
-      val compiledEnv: ZLayer[Any, Any, Execution.EnvService] = Execution.live(testEnv)
-      val layer0: ZLayer[Any, Any, Layer] = zio.console.Console.live ++ compiledEnv
       e.provideLayer(layer0)
     },
     testM("compile simple order by query") {
@@ -65,9 +80,15 @@ object CompilerSpec {
           zio.console.putStrLn(input.values.toString())
         }
       } yield assert(result)(isSuccess)
-      type Layer = zio.console.Console with Execution.EnvService
-      val compiledEnv: ZLayer[Any, Any, Execution.EnvService] = Execution.live(testEnv)
-      val layer0: ZLayer[Any, Any, Layer] = zio.console.Console.live ++ compiledEnv
+      e.provideLayer(layer0)
+    },
+    testM("compile simple aggregation query") {
+      val e = for {
+        result <- testCompilation("TestTable | summarize cnt=count()")
+        _ <- Execution.run(result).foreach { input =>
+          zio.console.putStrLn(input.values.toString())
+        }
+      } yield assert(result)(isSuccess)
       e.provideLayer(layer0)
     }
   )
