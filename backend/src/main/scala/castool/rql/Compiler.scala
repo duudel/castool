@@ -44,11 +44,9 @@ object Compiler {
           case Parser.Failure(msg, pos) =>
             ZIO.fail(Error(msg, Location(pos).atSourceText(q)))
         }
-      semCheckEnv <- ZIO.access[SemCheck.Env] { env => env }
-      checked <- SemCheck.check(ast, semCheckEnv) match {
-        case SemCheck.Success(checked) => ZIO.succeed(checked)
-        case SemCheck.Failure(msgs) =>
-            ZIO.fail(Error(msgs.mkString("; "), Location(0).atSourceText(q)))
+      checked <- SemCheck.check(ast).mapError {
+        case SemCheck.Error(msg, location) =>
+          Error(msg, location.atSourceText(q))
       }
       result <- compile(checked)
     } yield result

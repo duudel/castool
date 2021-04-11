@@ -1,7 +1,10 @@
 package castool.rql
+
 import scala.collection.SeqMap
-import ResolveValueType._
 import scala.collection.mutable.Buffer
+import zio._
+
+import ResolveValueType._
 
 sealed trait Checked extends Serializable with Product
 
@@ -22,7 +25,6 @@ object Checked {
   }
   final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
 
-  //case class Expr[A <: Value](fn: InputRow => A, resultType: ValueType)
   sealed trait Expr[+A <: Value] { def resultType: ValueType }
   final case class Column[A <: Value](name: Name, resultType: ValueType) extends Expr[A]
   final case object NullLit extends Expr[Value] { def resultType: ValueType = ValueType.Null }
@@ -43,48 +45,8 @@ object Checked {
 }
 
 object SemCheck {
-  sealed trait Result[+A] extends Product {
-    def isSuccess: Boolean
-    def isFailure: Boolean
-    def map[B](f: A => B): Result[B] = this match {
-      case Success(x) => Success(f(x))
-      case Failure(_) => this.asInstanceOf[Result[B]]
-    }
-    def flatMap[B](f: A => Result[B]): Result[B] = this match {
-      case Success(x) => f(x)
-      case Failure(_) => this.asInstanceOf[Result[B]]
-    }
-  }
-  final case class Success[A](result: A) extends Result[A] {
-    def isSuccess: Boolean = true
-    def isFailure: Boolean = false
-  }
-  final case class Failure(messages: Seq[String]) extends Result[Nothing] {
-    def isSuccess: Boolean = false
-    def isFailure: Boolean = true
-  }
-
-  object Result {
-    def success[A](a: A): Result[A] = Success(a)
-    def failure[A](msg: String): Result[A] = Failure(msg)
-    def failure[A](msgs: Seq[String]): Result[A] = Failure(msgs)
-    def traverse[A, B](xs: Iterable[A])(f: A => Result[B]): Result[Iterable[B]] = {
-      xs.foldLeft(Result.success(Buffer.empty[B])) {
-        case (results, x) =>
-          for {
-            rs <- results
-          } yield rs
-
-          for {
-            rs <- results
-            fx <- f(x)
-          } yield rs :+ fx
-      }.map(ys => ys.toIterable)
-    }
-  }
-  object Failure {
-    def apply(msg: String): Failure = Failure(Seq(msg))
-  }
+  case class Error(msg: String, loc: Location)
+  type Result[+A] = ZIO[Env, Error, A]
 
   trait Env {
     def tableDef(name: Name): Result[SourceDef]
@@ -92,58 +54,58 @@ object SemCheck {
     def aggregationDef(name: Name): Result[AggregationDef[Value]]
   }
 
-  def check(ast: Ast.Source, env: Env): Result[Checked.Source] = {
+  def check(ast: Ast.Source): Result[Checked.Source] = {
     ast match {
       case Ast.Table(name, tok) =>
         for {
-          tableDef <- env.tableDef(name)
+          tableDef <- ZIO.accessM[Env] { env => env.tableDef(name) }
         } yield Checked.Table(name, tableDef)
       case Ast.Cont(source, op) =>
         for {
-          checkedSource <- check(source, env)
-          checkedOp <- checkOp(op, checkedSource, env)
+          checkedSource <- check(source)
+          checkedOp <- checkOp(op, checkedSource)
         } yield Checked.Cont(checkedSource, checkedOp)
     }
   }
 
-  def checkOp(ast: Ast.TopLevelOp, source: Checked.Source, env: Env): Result[Checked.TopLevelOp] = {
+  def checkOp(ast: Ast.TopLevelOp, source: Checked.Source): Result[Checked.TopLevelOp] = {
     ast match {
       case Ast.Where(expr, pos) =>
         for {
-          checkedExpr <- checkTypedExpr[Bool](expr, source.sourceDef, env)
+          checkedExpr <- checkTypedExpr[Bool](expr, source.sourceDef)
         } yield Checked.Where(checkedExpr, source.sourceDef)
       case Ast.Project(nameAndTok, pos) =>
         val names = nameAndTok.map(_.name)
         source.sourceDef.project(names) match {
           case Right(projectedDef) =>
-            Success(Checked.Project(names, projectedDef))
+            ZIO.succeed(Checked.Project(names, projectedDef))
           case Left(errors) =>
-            Failure(errors)
+            ZIO.fail(Error(errors.head, Location(nameAndTok.head.tok.pos)))
         }
       case Ast.Extend(name, expr, pos) =>
         for {
-          checkedExpr <- checkExpr(expr, source.sourceDef, env)
+          checkedExpr <- checkExpr(expr, source.sourceDef)
           extendedDef <- source.sourceDef.extend(name.name, checkedExpr.resultType) match {
-            case Right(extendedDef) => Success(extendedDef)
-            case Left(errors)       => Failure(errors)
+            case Right(extendedDef) => ZIO.succeed(extendedDef)
+            case Left(errors)       => ZIO.fail(Error(errors.head, Location(name.tok.pos)))
           }
         } yield Checked.Extend(name.name, checkedExpr, extendedDef)
       case Ast.OrderBy(names, order, pos) =>
         val projected = names.map { name => name -> source.sourceDef.get(name.name) }
         val errors = projected.collect {
-          case (name, None) => s"No such column name as '${name.name.n}'"
+          case (name, None) => name.tok.pos -> s"No such column name as '${name.name.n}'"
         }
         if (errors.nonEmpty) {
-          Failure(errors)
+          ZIO.fail(Error(errors.head._2, Location(errors.head._1)))
         } else {
           val result = Checked.OrderBy(names.map(_.name), order, source.sourceDef)
-          Success(result)
+          ZIO.succeed(result)
         }
       case Ast.Summarize(aggregations, groupBy, pos) =>
         for {
-          checkedAggregations <- Result.traverse(aggregations) { case Ast.Aggregation(nameAndTok, aggr) =>
+          checkedAggregations <- ZIO.foreach(aggregations) { case Ast.Aggregation(nameAndTok, aggr) =>
             for {
-              checkedAggrCall <- checkAggregationCall(aggr, source.sourceDef, env)
+              checkedAggrCall <- checkAggregationCall(aggr, source.sourceDef)
             } yield Checked.Aggregation(nameAndTok.name, checkedAggrCall)
           }
           checkedGroupBy = groupBy.map(_.name) // TODO: implement check
@@ -153,45 +115,45 @@ object SemCheck {
     }
   }
 
-  def checkTypedExpr[A <: Value: ValueTypeMapper](ast: Ast.Expr, sourceDef: SourceDef, env: Env): Result[Checked.Expr[A]] = {
-    checkExpr(ast, sourceDef, env).flatMap { expr =>
+  def checkTypedExpr[A <: Value: ValueTypeMapper](ast: Ast.Expr, sourceDef: SourceDef): Result[Checked.Expr[A]] = {
+    checkExpr(ast, sourceDef).flatMap { expr =>
       val vt = ResolveValueType.valueType[A]
       if (vt != expr.resultType) {
-        Failure(s"Expected expression of '$vt' type, got '${expr.resultType}'")
+        ZIO.fail(Error(s"Expected expression of '$vt' type, got '${expr.resultType}'", Location(ast.pos)))
       } else {
-        Success(expr.asInstanceOf[Checked.Expr[A]])
+        ZIO.succeed(expr.asInstanceOf[Checked.Expr[A]])
       }
     }
   }
 
-  def checkExpr(ast: Ast.Expr, sourceDef: SourceDef, env: Env): Result[Checked.Expr[Value]] = {
+  def checkExpr(ast: Ast.Expr, sourceDef: SourceDef): Result[Checked.Expr[Value]] = {
     ast match {
       case Ast.Column(name, pos) =>
         for {
           columnType <- sourceDef.get(name) match {
-            case Some(columnType) => Result.success(columnType)
-            case None => Result.failure(s"No such column as '${name.n}'")
+            case Some(columnType) => ZIO.succeed(columnType)
+            case None             => ZIO.fail(Error(s"No such column as '${name.n}'", Location(pos)))
           }
         } yield Checked.Column(name, columnType)
-      case Ast.NullLit(pos) => Result.success(Checked.NullLit)
-      case Ast.TrueLit(pos) => Result.success(Checked.TrueLit)
-      case Ast.FalseLit(pos) => Result.success(Checked.FalseLit)
-      case Ast.StringLit(value) => Result.success(Checked.StringLit(value.value))
-      case Ast.NumberLit(value) => Result.success(Checked.NumberLit(value.value))
+      case Ast.NullLit(pos)     => ZIO.succeed(Checked.NullLit)
+      case Ast.TrueLit(pos)     => ZIO.succeed(Checked.TrueLit)
+      case Ast.FalseLit(pos)    => ZIO.succeed(Checked.FalseLit)
+      case Ast.StringLit(value) => ZIO.succeed(Checked.StringLit(value.value))
+      case Ast.NumberLit(value) => ZIO.succeed(Checked.NumberLit(value.value))
       //case DateLit(value: Token.DateLit)
 
       case Ast.UnaryExpr(op, expr, pos) =>
         for {
-          checkedExpr <- checkExpr(expr, sourceDef, env)
+          checkedExpr <- checkExpr(expr, sourceDef)
           _ <- checkUnaryOp(op, checkedExpr)
         } yield Checked.UnaryExpr(op, checkedExpr)
       case Ast.BinaryExpr(op, exprA, exprB, pos) =>
         for {
-          checkedExprA <- checkExpr(exprA, sourceDef, env)
-          checkedExprB <- checkExpr(exprB, sourceDef, env)
+          checkedExprA <- checkExpr(exprA, sourceDef)
+          checkedExprB <- checkExpr(exprB, sourceDef)
           resultType <- checkBinaryOp(op, checkedExprA, checkedExprB)
         } yield Checked.BinaryExpr(op, checkedExprA, checkedExprB, resultType)
-      case fc: Ast.FunctionCall => checkFunctionCall(fc, sourceDef, env)
+      case fc: Ast.FunctionCall => checkFunctionCall(fc, sourceDef)
     }
   }
 
@@ -199,13 +161,13 @@ object SemCheck {
     op match {
       case UnaryOp.Plus | UnaryOp.Minus =>
         expr.resultType match {
-          case ValueType.Num => Result.success(ValueType.Num)
-          case a => Result.failure(s"Incompatible type $a for unary operator ${op.display}")
+          case ValueType.Num => ZIO.succeed(ValueType.Num)
+          case a => ZIO.fail(Error(s"Incompatible type $a for unary operator ${op.display}", Location(0))) // TODO: location
         }
       case UnaryOp.Not =>
         expr.resultType match {
-          case ValueType.Bool => Result.success(ValueType.Bool)
-          case a => Result.failure(s"Incompatible type $a for unary operator ${op.display}")
+          case ValueType.Bool => ZIO.succeed(ValueType.Bool)
+          case a => ZIO.fail(Error(s"Incompatible type $a for unary operator ${op.display}", Location(0))) // TODO: location
         }
     }
   }
@@ -214,46 +176,46 @@ object SemCheck {
     op match {
       case BinaryOp.Plus =>
         (exprA.resultType, exprB.resultType) match {
-          case (ValueType.Num, ValueType.Num) => Result.success(ValueType.Num)
-          case (ValueType.Str, ValueType.Str) => Result.success(ValueType.Str)
-          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
+          case (ValueType.Num, ValueType.Num) => ZIO.succeed(ValueType.Num)
+          case (ValueType.Str, ValueType.Str) => ZIO.succeed(ValueType.Str)
+          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
         }
       case BinaryOp.Minus | BinaryOp.Multiply | BinaryOp.Divide =>
         (exprA.resultType, exprB.resultType) match {
-          case (ValueType.Num, ValueType.Num) => Result.success(ValueType.Num)
-          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
+          case (ValueType.Num, ValueType.Num) => ZIO.succeed(ValueType.Num)
+          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
         }
       case BinaryOp.Equal | BinaryOp.NotEqual | BinaryOp.Less | BinaryOp.LessEq | BinaryOp.Greater | BinaryOp.GreaterEq | BinaryOp.Assign =>
         if (exprA.resultType == exprB.resultType) {
-          Result.success(ValueType.Bool)
+          ZIO.succeed(ValueType.Bool)
         } else {
           val (a, b) = (exprA.resultType, exprB.resultType)
-          Result.failure(s"Incompatible types for expression $a ${op.display} $b")
+          ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
         }
       case BinaryOp.Contains | BinaryOp.NotContains =>
         (exprA.resultType, exprB.resultType) match {
-          case (ValueType.Str, ValueType.Str) => Result.success(ValueType.Bool)
-          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
+          case (ValueType.Str, ValueType.Str) => ZIO.succeed(ValueType.Bool)
+          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
         }
       case BinaryOp.And | BinaryOp.Or =>
         (exprA.resultType, exprB.resultType) match {
-          case (ValueType.Bool, ValueType.Bool) => Result.success(ValueType.Bool)
-          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
+          case (ValueType.Bool, ValueType.Bool) => ZIO.succeed(ValueType.Bool)
+          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
         }
     }
   }
 
-  def checkFunctionCall(ast: Ast.FunctionCall, sourceDef: SourceDef, env: Env): Result[Checked.FunctionCall[Value]] = {
+  def checkFunctionCall(ast: Ast.FunctionCall, sourceDef: SourceDef): Result[Checked.FunctionCall[Value]] = {
     for {
-      functionDef <- env.functionDef(ast.functionName)
-      args <- Result.traverse(ast.args) { expr => checkExpr(expr, sourceDef, env) }
+      functionDef <- ZIO.accessM[Env] { env => env.functionDef(ast.functionName) }
+      args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
     } yield Checked.FunctionCall(functionDef, args.toSeq)
   }
 
-  def checkAggregationCall(ast: Ast.FunctionCall, sourceDef: SourceDef, env: Env): Result[Checked.AggregationCall[Value]] = {
+  def checkAggregationCall(ast: Ast.FunctionCall, sourceDef: SourceDef): Result[Checked.AggregationCall[Value]] = {
     for {
-      aggregationDef <- env.aggregationDef(ast.functionName)
-      args <- Result.traverse(ast.args) { expr => checkExpr(expr, sourceDef, env) }
+      aggregationDef <- ZIO.accessM[Env] { env => env.aggregationDef(ast.functionName) }
+      args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
     } yield Checked.AggregationCall(aggregationDef, args.toSeq)
   }
 

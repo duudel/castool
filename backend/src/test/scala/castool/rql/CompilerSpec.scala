@@ -23,13 +23,13 @@ object CompilerSpec {
   val testCompilationEnv = new Compiler.Env {
     def tableDef(name: Name): SemCheck.Result[SourceDef] = {
       if (name == n"TestTable")
-        SemCheck.Success(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
-      else SemCheck.Failure(s"No such table as '${name.n}'")
+        zio.ZIO.succeed(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
+      else zio.ZIO.fail(SemCheck.Error(s"No such table as '${name.n}'", Location(0)))
     }
     def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] =
       if (name == n"not")
-        SemCheck.Success(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Map("b" -> ValueType.Bool), ValueType.Bool))
-      else SemCheck.Failure(s"No such function as '${name.n}'")
+        zio.ZIO.succeed(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Map("b" -> ValueType.Bool), ValueType.Bool))
+      else zio.ZIO.fail(SemCheck.Error(s"No such function as '${name.n}'", Location(0)))
     def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] = ???
   }
 

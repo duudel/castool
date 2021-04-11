@@ -14,37 +14,38 @@ object SemCheckSpec {
 
   val env = new SemCheck.Env {
     def tableDef(name: Name): SemCheck.Result[SourceDef] = {
-      tables.get(name).map(SemCheck.Success(_)).getOrElse(SemCheck.Failure(s"No such table as '${name.n}'"))
+      zio.ZIO.fromOption(tables.get(name))
+        .mapError(_ => SemCheck.Error(s"No such table as ${name.n}", Location(0)))
     }
-    def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] = SemCheck.Failure(s"No such function as '${name.n}'")
-    def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] = SemCheck.Failure(s"No such aggregation function as '${name.n}'")
+    def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] =
+      zio.ZIO.fail(SemCheck.Error(s"No such function as '${name.n}'", Location(0)))
+    def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] =
+      zio.ZIO.fail(SemCheck.Error(s"No such aggregation function as '${name.n}'", Location(0)))
   }
 
-  def semCheckTest(s: String)(testImpl: SemCheck.Result[_] => TestResult): TestResult = {
-    Lexer.lex(s) match {
+  def semCheckTest(s: String): zio.IO[SemCheck.Error, Checked] = {
+    val result = Lexer.lex(s) match {
       case Lexer.Success(tokens) =>
         Parser.parse(tokens) match {
           case Parser.Success(ast) =>
-            val result = SemCheck.check(ast, env)
-            testImpl(result)
-          case Parser.Failure(error, _) =>
-            assert(error)(equalTo(""))
+            SemCheck.check(ast)
+          case Parser.Failure(error, loc) =>
+            zio.ZIO.fail(SemCheck.Error(error, Location(loc)))
         }
-      case Lexer.Failure(error, _) =>
-        assert(error)(equalTo(""))
+      case Lexer.Failure(error, loc) =>
+        zio.ZIO.fail(SemCheck.Error(error, Location(loc)))
     }
+    result.provide(env)
   }
 
   val tests = suite("SemCheckSpec")(
-    test("semantic check fails with non boolean where expression") {
-      semCheckTest("TableName | where column1") { result =>
-        assert(result.isFailure)(equalTo(true))
-      }
-    },
-    test("semantic check succeeds with boolean where expression") {
-      semCheckTest("TableName | where column1 > 10") { result =>
-        assert(result.isSuccess)(equalTo(true))
-      }
+    testM("semantic check fails with non boolean where expression") {
+      val result = semCheckTest("TableName | where column1")
+      assertM(result)(anything)
+    } @@ TestAspect.failing,
+    testM("semantic check succeeds with boolean where expression") {
+      val result = semCheckTest("TableName | where column1 > 10")
+      assertM(result)(anything)
     }
   )
 }
