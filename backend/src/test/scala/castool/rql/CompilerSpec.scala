@@ -10,29 +10,32 @@ import zio.test.environment._
 import Name.NameInterpolator
 
 object CompilerSpec {
-  val testEnv = new Compiled.Env {
-    def table(name: Name): Option[Compiled.Stream] =
+  val testEnv = new Execution.Env {
+    def table(name: Name): Option[Execution.Stream] =
       if (name == n"TestTable")
         Some(ZStream(
           InputRow(n"test_column" -> Str("Hello there!"), n"flag" -> Bool(true)),
           InputRow(n"test_column" -> Str("Row number 2!"), n"flag" -> Bool(false)),
         ))
       else None
-    def tableDef(name: Name): Option[SourceDef] = {
+  }
+
+  val testCompilationEnv = new Compiler.Env {
+    def tableDef(name: Name): SemCheck.Result[SourceDef] = {
       if (name == n"TestTable")
-        Some(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
-      else None
+        SemCheck.Success(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
+      else SemCheck.Failure(s"No such table as '${name.n}'")
     }
-    def function(name: Name): Option[FunctionDef[_]] =
+    def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] =
       if (name == n"not")
-        Some(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Map("b" -> ValueType.Bool), ValueType.Bool))
-      else None
-    def aggregation(name: Name): Option[FunctionDef[_]] = ???
+        SemCheck.Success(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Map("b" -> ValueType.Bool), ValueType.Bool))
+      else SemCheck.Failure(s"No such function as '${name.n}'")
+    def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] = ???
   }
 
   def testCompilation(s: String): IO[Compiler.Error, Compiled.Source] = {
     val result = Compiler.compileQuery(s)
-    result.provide(testEnv)
+    result.provide(testCompilationEnv)
   }
 
   val isSuccess = Assertion.assertion("compilation result")()((a: Any) => true)
@@ -50,8 +53,8 @@ object CompilerSpec {
           zio.console.putStrLn(input.values.toString())
         }
       } yield assert(result)(isSuccess)
-      type Layer = zio.console.Console with Compiled.EnvService
-      val compiledEnv: ZLayer[Any, Any, Compiled.EnvService] = Compiled.live(testEnv)
+      type Layer = zio.console.Console with Execution.EnvService
+      val compiledEnv: ZLayer[Any, Any, Execution.EnvService] = Execution.live(testEnv)
       val layer0: ZLayer[Any, Any, Layer] = zio.console.Console.live ++ compiledEnv
       e.provideLayer(layer0)
     },
@@ -62,8 +65,8 @@ object CompilerSpec {
           zio.console.putStrLn(input.values.toString())
         }
       } yield assert(result)(isSuccess)
-      type Layer = zio.console.Console with Compiled.EnvService
-      val compiledEnv: ZLayer[Any, Any, Compiled.EnvService] = Compiled.live(testEnv)
+      type Layer = zio.console.Console with Execution.EnvService
+      val compiledEnv: ZLayer[Any, Any, Execution.EnvService] = Execution.live(testEnv)
       val layer0: ZLayer[Any, Any, Layer] = zio.console.Console.live ++ compiledEnv
       e.provideLayer(layer0)
     }

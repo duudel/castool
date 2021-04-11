@@ -1,144 +1,34 @@
 package castool.rql
 
 import zio._
-import zio.stream._
 
 import scala.collection.SeqMap
 
 sealed trait Compiled extends Serializable with Product
 
 object Compiled {
-  type EnvService = zio.Has[Env]
-  type Stream = ZStream[EnvService, Throwable, InputRow]
-
-  trait Env {
-    def table(name: Name): Option[Stream]
-    def tableDef(name: Name): Option[SourceDef]
-    def function(name: Name): Option[FunctionDef[_]]
-    def aggregation(name: Name): Option[FunctionDef[_]]
-  }
-
-  def live(env: Env): ZLayer[Any, Nothing, zio.Has[Env]] = ZLayer.fromEffect {
-    ZIO.succeed(env)
-  }
-
-  sealed trait Source extends Compiled { def stream: Stream }
-  final case class Table(name: Name) extends Source {
-    def stream: Stream = ZStream.accessStream[EnvService] { service =>
-      val env = service.get
-      env.table(name) match {
-        case Some(stream) => stream
-        case None =>
-          val err = "Runtime: No such table as'" + name.n + "'"
-          ZStream.fail(
-            new NoSuchElementException()
-          )
-      }
-    }
-  }
-  final case class Cont(source: Source, op: TopLevelOp) extends Source {
-    def stream: Stream = op.transform(source.stream)
-  }
+  sealed trait Source extends Compiled
+  final case class Table(name: Name) extends Source
+  final case class Cont(source: Source, op: TopLevelOp) extends Source
 
   trait Expr[A <: Value] { def eval(input: InputRow): A }
 
-  sealed trait TopLevelOp extends Compiled { def transform(source: Stream): Stream }
-  final case class Where(expr: Expr[Bool]) extends TopLevelOp {
-    def transform(source: Stream): Stream = source.filter((expr.eval _).andThen(_.v))
-  }
-  final case class Project(names: Seq[Name]) extends TopLevelOp {
-    def transform(source: Stream): Stream = source.map { input =>
-      val values = names.map(name => name -> input.values(name))
-      InputRow(values)
-    }
-  }
-  final case class Extend(name: Name, expr: Expr[Value]) extends TopLevelOp {
-    def transform(source: Stream): Stream = source.map { input =>
-      val value = expr.eval(input)
-      val newValue = (name, value)
-      InputRow(input.values + newValue)
-    }
-  }
-  private case class OrderValues(xs: Seq[Value])
-  private implicit val ordering: Ordering[OrderValues] = new Ordering[OrderValues] {
-    override def compare(as: OrderValues, bs: OrderValues): Int = {
-      as.xs.zip(bs.xs).foldLeft(0) { case (acc, (a, b)) =>
-        if (acc == 0) {
-          (a, b) match {
-            case (Null, Null) => 0
-            case (Null, _) => -1
-            case (_, Null) => 1
-            case (Bool(true), Bool(true)) => 0
-            case (Bool(false), Bool(true)) => -1
-            case (Bool(true), Bool(false)) => 1
-            case (Bool(false), Bool(false)) => 0
-            case (Num(x), Num(y)) => if (x == y) 0 else if (x < y) -1 else 1
-            case (Str(x), Str(y)) => x.compare(y)
-            case (Obj(x), Obj(y)) => -1 // TODO: figure out how to compare or treat as an error in sem check
-            case x => throw new MatchError(x)
-          }
-        } else {
-          acc
-        }
-      }
-    }
-  }
-  final case class OrderBy(names: Seq[Name], order: Order) extends TopLevelOp {
-    def transform(source: Stream): Stream = {
-      def orderBy: InputRow => OrderValues = { input =>
-        val values = names.map(name => input.values(name))
-        OrderValues(values)
-      }
-      val folded = source.fold(Vector.empty[InputRow]) { case (acc, input) => acc :+ input }
-      val it = folded.map(_.sortBy(orderBy)(if (order == Order.Asc) ordering else ordering.reverse))
-      ZStream.fromIterableM(it)
-    }
-  }
-
+  sealed trait TopLevelOp extends Compiled
+  final case class Where(expr: Expr[Bool]) extends TopLevelOp
+  final case class Project(names: Seq[Name]) extends TopLevelOp
+  final case class Extend(name: Name, expr: Expr[Value]) extends TopLevelOp
+  final case class OrderBy(names: Seq[Name], order: Order) extends TopLevelOp
   case class Aggregation(name: Name, initialValue: Value, aggr: (Value, InputRow) => Value, finalPhase: (Value, Num) => Value)
-  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name]) extends TopLevelOp {
-    def transform(source: Stream): Stream = {
-      val initialValues = aggregations.map(_.initialValue)
-      if (groupBy.isEmpty) {
-        val result = source.fold(initialValues) { case (values, input) =>
-          values.zip(aggregations).map { case (acc, aggregation) =>
-            aggregation.aggr(acc, input)
-          }
-        }.map(values => InputRow(aggregations.map(_.name).zip(values)))
-        ZStream.fromEffect(result)
-      } else {
-        val keyFunc = (input: InputRow) => groupBy.map(input.values)
-        source.groupByKey(keyFunc).apply { case (key, stream) =>
-          val result = stream
-            .fold((initialValues, 0)) { case ((values, n), input) =>
-              val results = values
-                .zip(aggregations)
-                .map { case (acc, aggregation) => aggregation.aggr(acc, input) }
-              (results, n + 1)
-            }
-            .map { case (values, n) =>
-              val results = aggregations
-                .zip(values)
-                .map { case (aggregation, value) =>
-                  val finalized = aggregation.finalPhase(value, Num(n))
-                  (aggregation.name, finalized)
-                }
-              InputRow(results)
-            }
-          ZStream.fromEffect(result)
-        }
-      }
-    }
-  }
-
+  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name]) extends TopLevelOp
 }
-
-case class CompiledQuery(q: Compiled)
 
 object Compiler {
   case class Error(error: String, loc: SourceLocation)
 
-  type CompiledIO[A] = ZIO[Compiled.Env, Error, A]
+  trait Env extends SemCheck.Env {
+  }
+
+  type CompiledIO[A] = ZIO[Env, Error, A]
 
   def compileQuery(q: String): CompiledIO[Compiled.Source] = {
     for {
@@ -154,23 +44,7 @@ object Compiler {
           case Parser.Failure(msg, pos) =>
             ZIO.fail(Error(msg, Location(pos).atSourceText(q)))
         }
-      semCheckEnv <- ZIO.accessM[Compiled.Env] { env =>
-        val scEnv = new SemCheck.Env {
-          def tableDef(name: Name): SemCheck.Result[SourceDef] = env.tableDef(name) match {
-            case Some(result) => SemCheck.Result.success(result)
-            case None => SemCheck.Result.failure(s"No table def found for '${name.n}'")
-          }
-          def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] = env.function(name) match {
-            case Some(result) => SemCheck.Result.success(result.asInstanceOf[FunctionDef[Value]])
-            case None => SemCheck.Result.failure(s"No function def found for '${name.n}'")
-          }
-          def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] = env.aggregation(name) match {
-            case Some(result) => SemCheck.Result.success(result.asInstanceOf[AggregationDef[Value]])
-            case None => SemCheck.Result.failure(s"No aggregation def found for '${name.n}'")
-          }
-        }
-        ZIO.succeed(scEnv)
-      }
+      semCheckEnv <- ZIO.access[SemCheck.Env] { env => env }
       checked <- SemCheck.check(ast, semCheckEnv) match {
         case SemCheck.Success(checked) => ZIO.succeed(checked)
         case SemCheck.Failure(msgs) =>

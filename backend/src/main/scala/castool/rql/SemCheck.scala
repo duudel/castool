@@ -3,14 +3,12 @@ import scala.collection.SeqMap
 import ResolveValueType._
 import scala.collection.mutable.Buffer
 
-sealed trait Checked extends Serializable with Product {
-}
+sealed trait Checked extends Serializable with Product
 
 object Checked {
   sealed trait Source extends Checked { def sourceDef: SourceDef }
   final case class Table(name: Name, sourceDef: SourceDef) extends Source
   final case class Cont(source: Source, op: TopLevelOp) extends Source { def sourceDef: SourceDef = op.sourceDef }
-
 
   sealed trait TopLevelOp extends Checked with Serializable with Product { def sourceDef: SourceDef }
   final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
@@ -41,15 +39,6 @@ object Checked {
   final case class FunctionCall[A <: Value](functionDef: FunctionDef[A], args: Seq[Expr[_ <: Value]]) extends Expr[A] {
     def resultType: ValueType = functionDef.returnType
   }
-
-  //sealed trait EvalError {
-  //  def message: String
-  //}
-
-  //type Eval[A] = zio.ZIO[InputRow, EvalError, A]
-  //sealed trait Expr[A] {
-  //  def evaluate: Eval[A]
-  //}
 
 }
 
