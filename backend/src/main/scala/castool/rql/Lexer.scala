@@ -204,7 +204,7 @@ object Lexer {
   val stringEscapeSeq = char('\\') :> any('r', 'n', 't', '"', '\'', '\\')
   val stringLitDq = char('"') :> (anyBut('\\', '"') :| stringEscapeSeq).* :> char('"')
   val stringLitSq = char('\'') :> (anyBut('\\', '\'') :| stringEscapeSeq).* :> char('\'')
-  val stringLit = (stringLitDq :| stringLitSq).!(StringLit)
+  val stringLit = (stringLitDq :| stringLitSq).!((s, pos) => StringLit(s.drop(1).dropRight(1), pos))
 
   val nullLit = keyword("null").!(NullLit)
   val trueLit = keyword("true").!(TrueLit)

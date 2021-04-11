@@ -317,11 +317,12 @@ object Parser {
     lazy val number_lit_expr: Parser[Ast.NumberLit] = accept[Token.NumberLit].map(lit => Ast.NumberLit(lit))
     lazy val string_lit_expr: Parser[Ast.StringLit] = accept[Token.StringLit].map(lit => Ast.StringLit(lit))
     lazy val funcCall_expr: Parser[Ast.FunctionCall] =
-      ((acceptName <~ accept[Token.LParen]) ~ ((st) => expr(st)).*(accept[Token.Comma]) <~ accept[Token.RParen]).map {
+      ((acceptName <~ accept[Token.LParen]) ~ (st => expr(st)).*(accept[Token.Comma]) <~ accept[Token.RParen]).map {
         case (nameAndTok, args) => Ast.FunctionCall(functionName = nameAndTok.name, args = args, pos = nameAndTok.tok.pos)
       }
+    lazy val parenth_expr: Parser[_ <: Ast.Expr] = (accept[Token.LParen] ~> (st => expr(st)) <~ accept[Token.RParen])
     lazy val term_expr: Parser[_ <: Ast.Expr] = any(
-      funcCall_expr, column_expr, null_lit_expr, true_lit_expr, false_lit_expr, number_lit_expr, string_lit_expr
+      funcCall_expr, column_expr, null_lit_expr, true_lit_expr, false_lit_expr, number_lit_expr, string_lit_expr, parenth_expr
     )
     lazy val unary_expr: Parser[_ <: Ast.Expr] = (any(accept[Token.OpNot], accept[Token.OpPlus], accept[Token.OpMinus]) ~ term_expr).map {
       case (opToken, expr) => Ast.UnaryExpr(op = opToken.unaryOp, expr = expr, pos = opToken.pos)
@@ -360,9 +361,9 @@ object Parser {
             Ast.Summarize(aggregations, groupBy, pos = s.pos)
         }
       lazy val toplevel: Parser[Ast.Source] = (table
-        ~ any[Ast.TopLevelOp](where, extend, project, orderBy, summarize).*(accept[Token.Bar], accept[Token.Bar])).map {
-          case (table, Nil) => table
-          case (table, ops) => ops.foldLeft[Ast.Source](table) {
+        ~? any[Ast.TopLevelOp](where, extend, project, orderBy, summarize).*(accept[Token.Bar], accept[Token.Bar])).map {
+          case (table, None) => table
+          case (table, Some(ops)) => ops.foldLeft[Ast.Source](table) {
             case (acc, op) => Ast.Cont(acc, op)
           }
       }
