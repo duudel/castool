@@ -30,10 +30,10 @@ object SemCheckSpec {
           case Parser.Success(ast) =>
             SemCheck.check(ast)
           case Parser.Failure(error, loc) =>
-            zio.ZIO.fail(SemCheck.Error(error, Location(loc)))
+            zio.ZIO.fail(SemCheck.Error(error, loc))
         }
       case Lexer.Failure(error, loc) =>
-        zio.ZIO.fail(SemCheck.Error(error, Location(loc)))
+        zio.ZIO.fail(SemCheck.Error(error, loc))
     }
     result.provide(env)
   }

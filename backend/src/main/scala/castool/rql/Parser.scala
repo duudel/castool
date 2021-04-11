@@ -6,7 +6,7 @@ object Parser {
   sealed trait Result
 
   final case class Success(ast: Ast.Source) extends Result
-  final case class Failure(error: String, pos: Int) extends Result
+  final case class Failure(error: String, loc: Location) extends Result
 
   case class Input(current: Option[Token], tokens: Iterable[Token]) {
     def hasInput: Boolean = current.nonEmpty
@@ -377,9 +377,9 @@ object Parser {
   def parse[A](tokens: Iterable[Token]): Result = {
     parseWith(tokens, G.toplevel) match {
       case St.Ok(Input(None, _), ast) => Success(ast)
-      case St.Ok(Input(Some(current), _), ast) => Failure("Unrecognized input after succesfully parsed query: " + current.display, current.pos)
-      case St.Nok(input, message) => Failure(message, if (input.hasInput) input.current.get.pos else -1)
-      case St.Error(input, message) => Failure(message, if (input.hasInput) input.current.get.pos else -1)
+      case St.Ok(Input(Some(current), _), ast) => Failure("Unrecognized input after succesfully parsed query: " + current.display, Location(current.pos))
+      case St.Nok(input, message) => Failure(message, if (input.hasInput) Location(input.current.get.pos) else Location(-1))
+      case St.Error(input, message) => Failure(message, if (input.hasInput) Location(input.current.get.pos) else Location(-1))
     }
   }
 

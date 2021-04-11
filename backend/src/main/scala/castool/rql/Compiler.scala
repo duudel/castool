@@ -35,14 +35,14 @@ object Compiler {
       tokens <- Lexer.lex(q) match {
           case Lexer.Success(tokens) =>
             ZIO.succeed(tokens)
-          case Lexer.Failure(msg, pos) =>
-            ZIO.fail(Error(msg, Location(pos).atSourceText(q)))
+          case Lexer.Failure(msg, loc) =>
+            ZIO.fail(Error(msg, loc.atSourceText(q)))
         }
       ast <- Parser.parse(tokens) match {
           case Parser.Success(ast) =>
             ZIO.succeed(ast)
-          case Parser.Failure(msg, pos) =>
-            ZIO.fail(Error(msg, Location(pos).atSourceText(q)))
+          case Parser.Failure(msg, location) =>
+            ZIO.fail(Error(msg, location.atSourceText(q)))
         }
       checked <- SemCheck.check(ast).mapError {
         case SemCheck.Error(msg, location) =>

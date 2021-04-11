@@ -139,7 +139,7 @@ object Lexer {
     def accept(state: Valid): State = {
       val next = c.accept(state)
       next match {
-        case v: Valid => 
+        case v: Valid =>
           val startPos = state.input.pos
           val value = v.input.substringFrom(startPos)
           v.emit(tokenFn(value, startPos))
@@ -251,7 +251,7 @@ object Lexer {
 
   sealed trait Result
   final case class Success(tokens: Iterable[Token]) extends Result
-  final case class Failure(error: String, pos: Int) extends Result
+  final case class Failure(error: String, loc: Location) extends Result
 
   def valid(input: String) = Valid(Input(input, pos = 0), Vector.empty)
 
@@ -259,7 +259,7 @@ object Lexer {
     val state: Valid = valid(input)
     lexState(state) match {
       case Valid(_, tokens) => Success(tokens)
-      case Reject(prev) => Failure("Invalid token", prev.input.pos)
+      case Reject(prev) => Failure("Invalid token", Location(prev.input.pos))
     }
   }
 
