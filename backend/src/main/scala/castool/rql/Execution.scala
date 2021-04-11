@@ -61,11 +61,21 @@ object Execution {
       case Compiled.Summarize(aggregations, groupBy) =>
         val initialValues = aggregations.map(_.initialValue)
         if (groupBy.isEmpty) {
-          val result = source.fold(initialValues) { case (values, input) =>
-            values.zip(aggregations).map { case (acc, aggregation) =>
-              aggregation.aggr(acc, input)
+          val result = source
+            .fold((initialValues, 0)) { case ((values, n), input) =>
+              val results = values.zip(aggregations)
+                .map { case (acc, aggregation) => aggregation.aggr(acc, input)
+              }
+              (results, n + 1)
+            }.map { case (values, n) =>
+              val results = aggregations
+                .zip(values)
+                .map { case (aggregation, value) =>
+                  val finalized = aggregation.finalPhase(value, Num(n))
+                    (aggregation.name, finalized)
+                }
+              InputRow(results)
             }
-          }.map(values => InputRow(aggregations.map(_.name).zip(values)))
           ZStream.fromEffect(result)
         } else {
           val keyFunc = (input: InputRow) => groupBy.map(input.values)
