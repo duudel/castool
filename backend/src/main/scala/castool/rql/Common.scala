@@ -78,10 +78,8 @@ object InputRow {
 }
 
 object Eval {
-  //type Eval[A] = Any
-
   type V = Value
-  type Eval[R <: V] = Seq[V] => R
+  type Eval[+R <: V] = Seq[V] => R
 
   def arg[A<:V](args: Seq[V])(i: Int): A = args(i).asInstanceOf[A]
 
@@ -90,42 +88,21 @@ object Eval {
   def apply[R<:V,A1<:V,A2<:V](fn: Function2[A1,A2,R]): Eval[R] = args => fn(arg(args)(0), arg(args)(1))
   def apply[R<:V,A1<:V,A2<:V,A3<:V](fn: Function3[A1,A2,A3,R]): Eval[R] = args => fn(arg(args)(0), arg(args)(1), arg(args)(2))
   def apply[R<:V,A1<:V,A2<:V,A3<:V,A4<:V](fn: Function4[A1,A2,A3,A4,R]): Eval[R] = args => fn(arg(args)(0), arg(args)(1), arg(args)(2), arg(args)(3))
-  //Eval[A](fn)
-  //def apply[A<:Value, P1](fn: Function1[P1, A]): Eval[A] = Eval[A](fn)
-  //def apply[A<:Value, P1, P2](fn: Function2[P1, P2, A]): Eval[A] = Eval[A](fn)
-  //def apply[A<:Value, P1, P2, P3](fn: Function3[P1, P2, P3, A]): Eval[A] = Eval[A](fn)
 }
-/*case class Eval[A<:Value](fn: Any) {
-  def call(args: Seq[Value]): A = {
 
-  }
-  def call(args: List[Any]): A = {
-    args match {
-      case Nil =>
-        fn.asInstanceOf[Function0[A]].apply()
-      case a1 :: Nil =>
-        fn.asInstanceOf[Function1[Any, A]].apply(a1)
-      case a1 :: a2 :: Nil =>
-        fn.asInstanceOf[Function2[Any, Any, A]].apply(a1, a2)
-      case a1 :: a2 :: a3 :: Nil =>
-        fn.asInstanceOf[Function3[Any, Any, Any, A]].apply(a1, a2, a3)
-    }
-  }
-}*/
-
-sealed trait Callable[A <: Value] {
+sealed trait Callable[+A <: Value] {
   def evaluate: Eval.Eval[A]
   def parameters: Map[String, ValueType]
   def returnType: ValueType
 }
 
-case class FunctionDef[A <: Value](
+case class FunctionDef[+A <: Value](
   evaluate: Eval.Eval[A],
   parameters: Map[String, ValueType],
   returnType: ValueType,
 ) extends Callable[A]
 
-case class AggregationDef[A <: Value](
+case class AggregationDef[+A <: Value](
   evaluate: Eval.Eval[A],
   parameters: Map[String, ValueType],
   returnType: ValueType,
