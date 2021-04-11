@@ -43,7 +43,6 @@ object SemCheckSpec {
     },
     test("semantic check succeeds with boolean where expression") {
       semCheckTest("TableName | where column1 > 10") { result =>
-        println(result)
         assert(result.isSuccess)(equalTo(true))
       }
     }

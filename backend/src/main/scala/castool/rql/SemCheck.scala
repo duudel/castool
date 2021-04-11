@@ -19,6 +19,9 @@ object Checked {
   final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
 
   case class Aggregation(name: Name, aggr: AggregationCall[Value])
+  final case class AggregationCall[A <: Value](aggrDef: AggregationDef[A], args: Seq[Expr[_ <: Value]]) {
+    def resultType: ValueType = aggrDef.returnType
+  }
   final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
 
   //case class Expr[A <: Value](fn: InputRow => A, resultType: ValueType)
@@ -37,9 +40,6 @@ object Checked {
   final case class BinaryExpr[A <: Value](op: BinaryOp, exprA: Expr[A], exprB: Expr[A], resultType: ValueType) extends Expr[A]
   final case class FunctionCall[A <: Value](functionDef: FunctionDef[A], args: Seq[Expr[_ <: Value]]) extends Expr[A] {
     def resultType: ValueType = functionDef.returnType
-  }
-  final case class AggregationCall[A <: Value](aggrDef: AggregationDef[A], args: Seq[Expr[_ <: Value]]) extends Expr[A] {
-    def resultType: ValueType = aggrDef.returnType
   }
 
   //sealed trait EvalError {
@@ -194,6 +194,7 @@ object SemCheck {
       case Ast.UnaryExpr(op, expr, pos) =>
         for {
           checkedExpr <- checkExpr(expr, sourceDef, env)
+          _ <- checkUnaryOp(op, checkedExpr)
         } yield Checked.UnaryExpr(op, checkedExpr)
       case Ast.BinaryExpr(op, exprA, exprB, pos) =>
         for {
@@ -205,35 +206,50 @@ object SemCheck {
     }
   }
 
+  def checkUnaryOp(op: UnaryOp, expr: Checked.Expr[_]): Result[ValueType] = {
+    op match {
+      case UnaryOp.Plus | UnaryOp.Minus =>
+        expr.resultType match {
+          case ValueType.Num => Result.success(ValueType.Num)
+          case a => Result.failure(s"Incompatible type $a for unary operator ${op.display}")
+        }
+      case UnaryOp.Not =>
+        expr.resultType match {
+          case ValueType.Bool => Result.success(ValueType.Bool)
+          case a => Result.failure(s"Incompatible type $a for unary operator ${op.display}")
+        }
+    }
+  }
+
   def checkBinaryOp(op: BinaryOp, exprA: Checked.Expr[_], exprB: Checked.Expr[_]): Result[ValueType] = {
     op match {
       case BinaryOp.Plus =>
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Num, ValueType.Num) => Result.success(ValueType.Num)
           case (ValueType.Str, ValueType.Str) => Result.success(ValueType.Str)
-          case (a, b) => Result.failure(s"Incompatible types for expression $$a ${op.display} $b")
+          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.Minus | BinaryOp.Multiply | BinaryOp.Divide =>
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Num, ValueType.Num) => Result.success(ValueType.Num)
-          case (a, b) => Result.failure(s"Incompatible types for expression $$a ${op.display} $b")
+          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.Equal | BinaryOp.NotEqual | BinaryOp.Less | BinaryOp.LessEq | BinaryOp.Greater | BinaryOp.GreaterEq | BinaryOp.Assign =>
         if (exprA.resultType == exprB.resultType) {
           Result.success(ValueType.Bool)
         } else {
           val (a, b) = (exprA.resultType, exprB.resultType)
-          Result.failure(s"Incompatible types for expression $$a ${op.display} $b")
+          Result.failure(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.Contains | BinaryOp.NotContains =>
         (exprA.resultType, exprB.resultType) match {
-          case (ValueType.Str, ValueType.Str) => Result.success(ValueType.Str)
-          case (a, b) => Result.failure(s"Incompatible types for expression $$a ${op.display} $b")
+          case (ValueType.Str, ValueType.Str) => Result.success(ValueType.Bool)
+          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.And | BinaryOp.Or =>
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Bool, ValueType.Bool) => Result.success(ValueType.Bool)
-          case (a, b) => Result.failure(s"Incompatible types for expression $$a ${op.display} $b")
+          case (a, b) => Result.failure(s"Incompatible types for expression $a ${op.display} $b")
         }
     }
   }

@@ -47,18 +47,58 @@ object Name {
     }
   }
   def fromStringUnsafe(s: String): Name = fromString(s).right.get
+
+  implicit class NameInterpolator(sc: StringContext) {
+    def n(args: Any*): Name = {
+      val stringsIt = sc.parts.iterator
+      val argsIt = args.iterator
+      val builder = new java.lang.StringBuilder(stringsIt.next())
+      while (stringsIt.hasNext) {
+        builder.append(argsIt.next().toString())
+        builder.append(stringsIt.next())
+      }
+      val s = builder.toString()
+      Name.fromStringUnsafe(s)
+    }
+  }
 }
 
-case class InputRow(values: Map[Name, Value])
+case class InputRow(values: SeqMap[Name, Value])
+
+object InputRow {
+  def apply(iterable: Iterable[(Name, Value)]): InputRow = {
+    val values = iterable.foldLeft(SeqMap.empty[Name, Value]) {
+      case (acc, x) => acc + x
+    }
+    InputRow(values)
+  }
+  def apply(pairs: (Name, Value)*): InputRow = {
+    InputRow(pairs)
+  }
+}
 
 object Eval {
   //type Eval[A] = Any
-  def apply[A](fn: Function0[A]): Eval[A] = Eval[A](fn)
-  def apply[A, P1](fn: Function1[P1, A]): Eval[A] = Eval[A](fn)
-  def apply[A, P1, P2](fn: Function2[P1, P2, A]): Eval[A] = Eval[A](fn)
-  def apply[A, P1, P2, P3](fn: Function3[P1, P2, P3, A]): Eval[A] = Eval[A](fn)
+
+  type V = Value
+  type Eval[R <: V] = Seq[V] => R
+
+  def arg[A<:V](args: Seq[V])(i: Int): A = args(i).asInstanceOf[A]
+
+  def apply[R<:V](fn: Function0[R]): Eval[R] = args => fn()
+  def apply[R<:V,A1<:V](fn: Function1[A1,R]): Eval[R] = args => fn(args(0).asInstanceOf[A1])
+  def apply[R<:V,A1<:V,A2<:V](fn: Function2[A1,A2,R]): Eval[R] = args => fn(arg(args)(0), arg(args)(1))
+  def apply[R<:V,A1<:V,A2<:V,A3<:V](fn: Function3[A1,A2,A3,R]): Eval[R] = args => fn(arg(args)(0), arg(args)(1), arg(args)(2))
+  def apply[R<:V,A1<:V,A2<:V,A3<:V,A4<:V](fn: Function4[A1,A2,A3,A4,R]): Eval[R] = args => fn(arg(args)(0), arg(args)(1), arg(args)(2), arg(args)(3))
+  //Eval[A](fn)
+  //def apply[A<:Value, P1](fn: Function1[P1, A]): Eval[A] = Eval[A](fn)
+  //def apply[A<:Value, P1, P2](fn: Function2[P1, P2, A]): Eval[A] = Eval[A](fn)
+  //def apply[A<:Value, P1, P2, P3](fn: Function3[P1, P2, P3, A]): Eval[A] = Eval[A](fn)
 }
-case class Eval[A](fn: Any) {
+/*case class Eval[A<:Value](fn: Any) {
+  def call(args: Seq[Value]): A = {
+
+  }
   def call(args: List[Any]): A = {
     args match {
       case Nil =>
@@ -71,22 +111,22 @@ case class Eval[A](fn: Any) {
         fn.asInstanceOf[Function3[Any, Any, Any, A]].apply(a1, a2, a3)
     }
   }
-}
+}*/
 
 sealed trait Callable[A <: Value] {
+  def evaluate: Eval.Eval[A]
   def parameters: Map[String, ValueType]
   def returnType: ValueType
-  def evaluate: Eval[A]
 }
 
 case class FunctionDef[A <: Value](
-  evaluate: Eval[A],
+  evaluate: Eval.Eval[A],
   parameters: Map[String, ValueType],
   returnType: ValueType,
 ) extends Callable[A]
 
 case class AggregationDef[A <: Value](
-  evaluate: Eval[A],
+  evaluate: Eval.Eval[A],
   parameters: Map[String, ValueType],
   returnType: ValueType,
   initialValue: Value,
@@ -121,10 +161,10 @@ case class SourceDef(columns: SeqMap[Name, ValueType]) {
 
 object SourceDef {
   def apply(iterable: Iterable[(Name, ValueType)]): SourceDef = {
-    val columns = iterable.foldLeft(SeqMap.empty[Name, ValueType]) {
-      case (acc, x) => acc + x
-    }
-    SourceDef(columns)
+    SourceDef(SeqMap(iterable.toSeq: _*))
+  }
+  def apply(pairs: (Name, ValueType)*): SourceDef = {
+    SourceDef(SeqMap(pairs: _*))
   }
 }
 
@@ -170,4 +210,28 @@ object BinaryOp {
   case object Or extends LogicalOp("or")
   case object Assign extends AssignOp("=")
 }
+
+case class SourceLocation(line: Int, column: Int)
+
+case class Location(pos: Int) {
+  def atSourceText(text: String): SourceLocation = {
+    if (pos > text.length()) throw new NoSuchElementException(s"Invalid position (pos=$pos) for given source text")
+    var line = 1
+    var column = 0
+    var i = 0
+    while (i < text.length && i < pos) {
+      val ch = text.charAt(i)
+      if (ch == '\n') {
+        column = 0
+        line += 1
+      } else if (ch == '\r') {
+      } else {
+        column += 1
+      }
+      i += 1
+    }
+    SourceLocation(line, column)
+  }
+}
+
 
