@@ -108,10 +108,13 @@ object SemCheck {
               checkedAggrCall <- checkAggregationCall(aggr, source.sourceDef)
             } yield Checked.Aggregation(nameAndTok.name, checkedAggrCall)
           }
-          checkedGroupBy = groupBy.map(_.name) // TODO: implement check
-          sourceDef = SourceDef(checkedAggregations.map(a => a.name -> a.aggr.resultType))
-        } yield Checked.Summarize(checkedAggregations.toSeq, checkedGroupBy, sourceDef)
-
+          checkedGroupBy <- ZIO.foreach(groupBy) { case NameAndToken(name, tok) =>
+            ZIO.fromOption(source.sourceDef.get(name))
+              .map(valueType => name -> valueType)
+              .mapError(_ => Error(s"No such column as '${name.n}', used in group by", Location(tok.pos)))
+          }
+          sourceDef = SourceDef(checkedGroupBy ++ checkedAggregations.map(a => a.name -> a.aggr.resultType))
+        } yield Checked.Summarize(checkedAggregations.toSeq, checkedGroupBy.map(_._1), sourceDef)
     }
   }
 

@@ -94,7 +94,7 @@ object Execution {
                     val finalized = aggregation.finalPhase(value, Num(n))
                     (aggregation.name, finalized)
                   }
-                InputRow(results)
+                InputRow(groupBy.zip(key) ++ results)
               }
             ZStream.fromEffect(result)
           }
