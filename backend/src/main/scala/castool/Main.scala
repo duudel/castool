@@ -14,10 +14,7 @@ import castool.rql.{Lexer, Parser}
 
 object CasTool extends App {
   def run(args: List[String]) = {
-    Lexer.main()
-    Parser.main()
-    ZIO.succeed(zio.ExitCode.success)
-    //program.exitCode
+    program.exitCode
   }
 
   type AppEnv = service.CasService.AppEnv
