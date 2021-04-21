@@ -246,7 +246,7 @@ object Lexer {
 
   val tokens = choice(
     singleLineComment, multiLineComment, skipWhitespace, op,
-    ident, numberLit, stringLit, bar, lparen, rparen,
+    ident, numberLit, stringLit, bar, lparen, rparen, comma,
   ).*
 
   sealed trait Result
@@ -258,7 +258,8 @@ object Lexer {
   def lex(input: String): Result = {
     val state: Valid = valid(input)
     lexState(state) match {
-      case Valid(_, tokens) => Success(tokens)
+      case Valid(input, tokens) if !input.hasInput => Success(tokens)
+      case Valid(input, tokens) => Failure("Invalid token", Location(input.pos))
       case Reject(prev) => Failure("Invalid token", Location(prev.input.pos))
     }
   }

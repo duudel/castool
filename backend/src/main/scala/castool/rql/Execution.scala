@@ -17,7 +17,7 @@ object Execution {
 
   def run(q: Compiled.Source): Stream = {
     q match {
-      case Compiled.Table(name) => tableStream(name)
+      case Compiled.Table(name, _) => tableStream(name)
       case Compiled.Cont(source, op) =>
         transform(op, run(source))
     }
@@ -37,20 +37,20 @@ object Execution {
 
   def transform(op: Compiled.TopLevelOp, source: Stream): Stream = {
     op match {
-      case Compiled.Where(expr) =>
+      case Compiled.Where(expr, _) =>
         source.filter((expr.eval _).andThen(_.v))
-      case Compiled.Project(names) =>
+      case Compiled.Project(names, _) =>
         source.map { input =>
           val values = names.map(name => name -> input.values(name))
           InputRow(values)
         }
-      case Compiled.Extend(name, expr) =>
+      case Compiled.Extend(name, expr, _) =>
         source.map { input =>
           val value = expr.eval(input)
           val newValue = (name, value)
           InputRow(input.values + newValue)
         }
-      case Compiled.OrderBy(names, order) =>
+      case Compiled.OrderBy(names, order, _) =>
         def orderBy: InputRow => OrderValues = { input =>
           val values = names.map(name => input.values(name))
           OrderValues(values)
@@ -58,7 +58,7 @@ object Execution {
         val folded = source.fold(Vector.empty[InputRow]) { case (acc, input) => acc :+ input }
         val it = folded.map(_.sortBy(orderBy)(if (order == Order.Asc) ordering else ordering.reverse))
         ZStream.fromIterableM(it)
-      case Compiled.Summarize(aggregations, groupBy) =>
+      case Compiled.Summarize(aggregations, groupBy, _) =>
         val initialValues = aggregations.map(_.initialValue)
         if (groupBy.isEmpty) {
           val result = source

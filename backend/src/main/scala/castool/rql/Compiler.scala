@@ -4,22 +4,24 @@ import zio._
 
 import scala.collection.SeqMap
 
-sealed trait Compiled extends Serializable with Product
+sealed trait Compiled extends Serializable with Product {
+  def sourceDef: SourceDef
+}
 
 object Compiled {
   sealed trait Source extends Compiled
-  final case class Table(name: Name) extends Source
-  final case class Cont(source: Source, op: TopLevelOp) extends Source
+  final case class Table(name: Name, sourceDef: SourceDef) extends Source
+  final case class Cont(source: Source, op: TopLevelOp) extends Source { def sourceDef: SourceDef = op.sourceDef }
 
   trait Expr[A <: Value] { def eval(input: InputRow): A }
 
   sealed trait TopLevelOp extends Compiled
-  final case class Where(expr: Expr[Bool]) extends TopLevelOp
-  final case class Project(names: Seq[Name]) extends TopLevelOp
-  final case class Extend(name: Name, expr: Expr[Value]) extends TopLevelOp
-  final case class OrderBy(names: Seq[Name], order: Order) extends TopLevelOp
+  final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
+  final case class Project(names: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
+  final case class Extend(name: Name, expr: Expr[Value], sourceDef: SourceDef) extends TopLevelOp
+  final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
   case class Aggregation(name: Name, initialValue: Value, aggr: (Value, InputRow) => Value, finalPhase: (Value, Num) => Value)
-  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name]) extends TopLevelOp
+  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
 }
 
 object Compiler {
@@ -54,8 +56,8 @@ object Compiler {
 
   def compile(checked: Checked.Source): CompiledIO[Compiled.Source] = {
     checked match {
-      case Checked.Table(name, _) =>
-        ZIO.succeed(Compiled.Table(name))
+      case Checked.Table(name, sourceDef) =>
+        ZIO.succeed(Compiled.Table(name, sourceDef))
       case Checked.Cont(source, op) =>
         for {
           compiledSource <- compile(source)
@@ -66,22 +68,22 @@ object Compiler {
 
   def compileTopLevelOp(checked: Checked.TopLevelOp): CompiledIO[Compiled.TopLevelOp] = {
     checked match {
-      case Checked.Where(expr, _) =>
+      case Checked.Where(expr, sourceDef) =>
         for {
           compiledExpr <- compileExpr(expr)
-        } yield Compiled.Where(compiledExpr)
-      case Checked.Project(names, _) =>
-        ZIO.succeed(Compiled.Project(names))
-      case Checked.Extend(name, expr, _) =>
+        } yield Compiled.Where(compiledExpr, sourceDef)
+      case Checked.Project(names, sourceDef) =>
+        ZIO.succeed(Compiled.Project(names, sourceDef))
+      case Checked.Extend(name, expr, sourceDef) =>
         for {
           compiledExpr <- compileExpr[Value](expr)
-        } yield Compiled.Extend(name, compiledExpr)
-      case Checked.OrderBy(names, order, _) =>
-        ZIO.succeed(Compiled.OrderBy(names, order))
-      case Checked.Summarize(aggregations, groupBy, _) =>
+        } yield Compiled.Extend(name, compiledExpr, sourceDef)
+      case Checked.OrderBy(names, order, sourceDef) =>
+        ZIO.succeed(Compiled.OrderBy(names, order, sourceDef))
+      case Checked.Summarize(aggregations, groupBy, sourceDef) =>
         for {
           compiledAggrs <- ZIO.foreach(aggregations)(compileAggregationCall)
-        } yield Compiled.Summarize(compiledAggrs, groupBy)
+        } yield Compiled.Summarize(compiledAggrs, groupBy, sourceDef)
     }
   }
 

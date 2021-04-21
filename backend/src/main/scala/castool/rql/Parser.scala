@@ -115,7 +115,6 @@ object Parser {
         case St.Ok(input, _) =>
           input.current.collect {
             case t: Token if t.getClass() == tclass =>
-              //println(s"Match $t")
               St.Ok(input.advance, t.asInstanceOf[T])
             case t =>
               St.Nok(input, s"Expected $tokenKind, got ${t.getClass.getSimpleName}")
@@ -346,10 +345,14 @@ object Parser {
     lazy val project: Parser[Ast.Project] = (acceptIdent("project") ~! acceptName.*(accept[Token.Comma])).map {
       case (p, names) => Ast.Project(names, p.pos)
     }
-    lazy val orderBy: Parser[Ast.OrderBy] = ((acceptIdent("order") <~ acceptIdent("by"))
+    lazy val orderBy: Parser[Ast.OrderBy] = ((acceptIdent("order") ~! acceptIdent("by"))
       ~! acceptName.*(accept[Token.Comma])
-      ~ any(acceptIdent("asc"), acceptIdent("desc"))).map { case ((o, names), orderIdent) =>
-        val order = if (orderIdent.value == "asc") Order.Asc else Order.Desc
+      ~? any(acceptIdent("asc"), acceptIdent("desc"))).map { case (((o, _), names), orderIdent) =>
+        val order = orderIdent match {
+          case Some(o) if o.value == "asc" => Order.Asc
+          case Some(o)                     => Order.Desc
+          case None                        => Order.Asc
+        }
         Ast.OrderBy(names, order, pos = o.pos)
       }
       lazy val summarize: Parser[Ast.Summarize] = (acceptIdent("summarize")
@@ -380,34 +383,6 @@ object Parser {
       case St.Ok(Input(Some(current), _), ast) => Failure("Unrecognized input after succesfully parsed query: " + current.display, Location(current.pos))
       case St.Nok(input, message) => Failure(message, if (input.hasInput) Location(input.current.get.pos) else Location(-1))
       case St.Error(input, message) => Failure(message, if (input.hasInput) Location(input.current.get.pos) else Location(-1))
-    }
-  }
-
-  def main(): Unit = {
-    Lexer.lex("TableName or What and that or theOther") match {
-      case Lexer.Success(tokens) =>
-        val result = parseWith(tokens, G.expr)
-        println(result)
-      case Lexer.Failure(error, _) => println("Error " + error)
-    }
-
-    Lexer.lex("func(arg0+") match {
-      case Lexer.Success(tokens) =>
-        val result = parseWith(tokens, G.expr)
-        println(result)
-      case Lexer.Failure(error, _) => println("Error " + error)
-    }
-
-    Lexer.lex("""
-      Rows | where persistence_id contains "kala"
-      | extend json=as_json(event)
-      | summarize cnt=count() by persistence_id
-              """) match {
-      case Lexer.Success(tokens) =>
-        println("\n" + tokens)
-        val result = parseWith(tokens, G.toplevel)
-        println(result)
-      case Lexer.Failure(error, _) => println("Error " + error)
     }
   }
 
