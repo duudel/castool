@@ -9,7 +9,7 @@ import zio.stream._
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.cql
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 private[cassandra] class CassandraSessionImpl(cqlSession: CqlSession) extends CassandraSession.Service {
   private def convertRow(index: Long, row: cql.Row): ResultRow = {

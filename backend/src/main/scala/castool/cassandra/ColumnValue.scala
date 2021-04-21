@@ -6,6 +6,8 @@ import io.circe.generic.auto._
 import io.circe.generic.semiauto._
 import io.circe.syntax._
 import io.circe.HCursor
+import io.circe.DecodingFailure
+import io.circe.Json
 
 import com.datastax.oss.driver.api.core.cql
 import com.datastax.oss.driver.api.core.`type`.{DataType => CasDataType}
@@ -13,8 +15,7 @@ import java.util.Base64
 import java.net.InetAddress
 
 import scala.util.Try
-import io.circe.DecodingFailure
-import io.circe.Json
+import scala.jdk.CollectionConverters._
 
 sealed trait ColumnValue
 
@@ -65,9 +66,9 @@ object ColumnValue {
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DECIMAL =>
         fromValue(Decimal)(row.getBigDecimal(index))
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DOUBLE =>
-        fromValue(Double)(row.get(index, classOf[Double]))
+        fromValue(Double)(row.get(index, classOf[scala.Double]))
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.FLOAT =>
-        fromValue(Float)(row.get(index, classOf[Float]))
+        fromValue(Float)(row.get(index, classOf[scala.Float]))
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INT =>
         fromValue(Integer)(row.get(index, classOf[Int]))
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SMALLINT =>
@@ -88,6 +89,8 @@ object ColumnValue {
         fromValue(Inet)(row.getInetAddress(index))
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DATE =>
         fromValue(Date)(row.getLocalDate(index))
+      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIME =>
+        fromValue(Time)(row.getLocalTime(index))
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DURATION =>
         val dur = row.getCqlDuration(index)
         if (dur == null) {
@@ -95,12 +98,47 @@ object ColumnValue {
         } else {
           fromValue(Duration)(dur.toString())
         }
+      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.LIST =>
+        val list = row.getList[Any](index, classOf[Any])
+        if (list == null) {
+          Null
+        } else {
+          fromValue(List)(list.asScala.map(_.toString).toVector)
+        }
+      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.MAP =>
+        val map = row.getMap[String, Any](index, classOf[String], classOf[Any])
+        if (map == null) {
+          Null
+        } else {
+          fromValue(Map)(map.asScala.view.mapValues(_.toString).toMap)
+        }
+      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SET =>
+        val set = row.getSet[Any](index, classOf[Any])
+        if (set == null) {
+          Null
+        } else {
+          fromValue(Set)(set.asScala.map(_.toString).toSet)
+        }
+      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TUPLE =>
+        val tuple = row.getTupleValue(index)
+        if (tuple == null) {
+          Null
+        } else {
+          fromValue(Tuple)(tuple.getFormattedContents)
+        }
+      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.UDT =>
+        val value = row.getUdtValue(index)
+        if (value == null) {
+          Null
+        } else {
+          fromValue(Udt)(value.getFormattedContents)
+        }
 
       case _ =>
         Unknown(columnDef.getName().asCql(true))
     }
   }
-  
+
   object DataType extends Enumeration {
     val Ascii = Value
     val BigInt = Value
@@ -122,6 +160,11 @@ object ColumnValue {
     val Date = Value
     val Time = Value
     val Duration = Value
+    val List = Value
+    val Map = Value
+    val Set = Value
+    val Tuple = Value
+    val Udt = Value
 
     implicit val encoder: Encoder[DataType] = Encoder.enumEncoder(DataType)
     implicit val decoder: Decoder[DataType] = Decoder.enumDecoder(DataType)
@@ -146,7 +189,13 @@ object ColumnValue {
         case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.VARCHAR => Text
         case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INET => Inet
         case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DATE => Date
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIME => Time
         case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DURATION => Duration
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.LIST => List
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.MAP => Map
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SET => Set
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TUPLE => Tuple
+        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.UDT => Udt
       }
     }
   }
@@ -164,8 +213,8 @@ object ColumnValues {
   case class Bool(v: Boolean) extends ColumnValue // ProtocolConstants.DataType.BOOLEAN
   case class Counter(v: Long) extends ColumnValue // ProtocolConstants.DataType.COUNTER
   case class Decimal(v: scala.BigDecimal) extends ColumnValue // ProtocolConstants.DataType.DECIMAL
-  case class Double(v: Double) extends ColumnValue // ProtocolConstants.DataType.DOUBLE
-  case class Float(v: Float) extends ColumnValue // ProtocolConstants.DataType.FLOAT
+  case class Double(v: scala.Double) extends ColumnValue // ProtocolConstants.DataType.DOUBLE
+  case class Float(v: scala.Float) extends ColumnValue // ProtocolConstants.DataType.FLOAT
   case class Integer(v: Int) extends ColumnValue // ProtocolConstants.DataType.INT
   case class SmallInt(v: Short) extends ColumnValue // ProtocolConstants.DataType.SMALLINT
   case class TinyInt(v: Byte) extends ColumnValue // ProtocolConstants.DataType.TINYINT
@@ -175,8 +224,13 @@ object ColumnValues {
   case class TimeUuid(v: java.util.UUID) extends ColumnValue // ProtocolConstants.DataType.TIMEUUID
   case class Text(v: String) extends ColumnValue // ProtocolConstants.DataType.VARCHAR
   case class Inet(v: InetAddress) extends ColumnValue // ProtocolConstants.DataType.INET
-  case class Date(v: java.time.LocalDate) extends ColumnValue // ProtocolConstants.DataType.DATEue
-  case class Time(v: java.time.LocalTime) extends ColumnValue // ProtocolConstants.DataType.TIMEue
+  case class Date(v: java.time.LocalDate) extends ColumnValue // ProtocolConstants.DataType.DATE
+  case class Time(v: java.time.LocalTime) extends ColumnValue // ProtocolConstants.DataType.TIME
   case class Duration(v: String) extends ColumnValue // ProtocolConstants.DataType.DURATION
+  case class List(v: Vector[String]) extends ColumnValue // ProtocolConstants.DataType.LIST
+  case class Map(v: scala.collection.Map[String,String]) extends ColumnValue // ProtocolConstants.DataType.MAP
+  case class Set(v: scala.collection.Set[String]) extends ColumnValue // ProtocolConstants.DataType.SET
+  case class Tuple(v: String) extends ColumnValue // ProtocolConstants.DataType.TUPLE
+  case class Udt(v: String) extends ColumnValue // ProtocolConstants.DataType.UDT
 }
 

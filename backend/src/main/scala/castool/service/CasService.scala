@@ -26,7 +26,7 @@ import castool.configuration
 import castool.cassandra.{CassandraSession, ColumnValue, ResultRow, Metadata, QueryResponse}
 import castool.util.{ZioWebSocket, ZPipe}
 
-class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Effect: ContextShift] extends Http4sDsl[F] {
+class CasService[R <: CasService.AppEnv] { //[F[_]: Effect: ContextShift] extends Http4sDsl[F] {
   type STask[A] = RIO[R, A]
   val dsl = Http4sDsl[STask]
   import dsl._
@@ -81,7 +81,7 @@ class CasService[R <: CasService.AppEnv with zio.console.Console] { //[F[_]: Eff
 
       result
 
-    case GET -> Root / "metadata" => 
+    case GET -> Root / "metadata" =>
       CassandraSession.metadata.flatMap(Ok(_))
   }
 

@@ -7,7 +7,7 @@ import io.circe.generic.semiauto._
 
 import com.datastax.oss.driver
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import java.util.UUID
 
 object util {
@@ -64,7 +64,7 @@ object Keyspace {
 case class Table(
   id: Option[UUID],
   name: String,
-  columnDefs: Map[String, ColumnDefinition],
+  columnDefs: Seq[(String, ColumnDefinition)],
   partitionKey: Seq[String],
   clusteringColumns: Map[String, ClusteringOrder.Value]
 )
@@ -87,7 +87,7 @@ object Table {
     Table(
       id = util.fromOptional(t.getId()),
       name = t.getName().asCql(true),
-      columnDefs = columnDefs.toMap[String, ColumnDefinition],
+      columnDefs = columnDefs.toSeq,
       partitionKey = partitionKey.toSeq,
       clusteringColumns = clusteringColumns.toMap[String, ClusteringOrder.Value],
     )
