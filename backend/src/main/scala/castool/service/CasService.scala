@@ -39,13 +39,51 @@ class CasService[R <: CasService.AppEnv] { //[F[_]: Effect: ContextShift] extend
     "/auth" -> CORS(authRoutes),
   ).orNotFound
 
+  val PolicyViolation = 1008
+  val paging = 1000
+
   def rootRoutes: HttpRoutes[STask] = HttpRoutes.of[STask] {
     case GET -> Root =>
       Ok(10)
 
-    case req @ GET -> Root / "squery" =>
-      val PolicyViolation = 1008
+    case req @ GET -> Root / "rql" =>
+      def handleQuery(query: String): STask[ZStream[R, Throwable, RqlMessage]] = {
+        val queryResult = for {
+          _ <- zio.console.putStrLn("Query: " + query)
+          queryResult <- RqlService.query(query)
+        } yield {
+          val RqlService.QueryResult(columnDefs, rowsStream) = queryResult
+          val results = rowsStream
+            .groupedWithin(paging, zio.duration.Duration.fromMillis(100))
+            .map(rows => RqlMessage.Rows(rows.toVector))
+          ZStream(RqlMessage.Success(columnDefs)) ++
+            results ++
+            ZStream(RqlMessage.Finished)
+        }
+        queryResult.catchAll {
+          error: RqlService.Error =>
+            println(s"Here is error: $error")
+            ZIO.succeed(ZStream(RqlMessage.Error(error.msg)))
+        }
+      }
 
+      def makeReceive(queue: Queue[String]): ZPipe[R, Throwable, WebSocketFrame, Unit] = _.mapM {
+        case WebSocketFrame.Text(query, _) =>
+          queue.offer(query).unit
+        case WebSocketFrame.Close(_) =>
+          queue.shutdown
+      }
+
+      val result = for {
+        queue <- zio.ZQueue.bounded[String](10)
+        send = ZStream.fromQueue(queue).mapM(handleQuery).flatten.map(qmsg => WebSocketFrame.Text(qmsg.asJson.toString))
+        receive = makeReceive(queue)
+        result <- ZioWebSocket[R].build(send, receive)
+      } yield result
+
+      result
+
+    case req @ GET -> Root / "squery" =>
       def handleQuery(query: String): STask[ZStream[R, Throwable, QueryMessage]] = {
         for {
           _ <- zio.console.putStrLn("Query: " + query)
@@ -93,18 +131,21 @@ class CasService[R <: CasService.AppEnv] { //[F[_]: Effect: ContextShift] extend
 
 object CasService {
   def apply[R <: AppEnv](): CasService[R] = new CasService[R]()
+  import RqlService.RqlService
 
   import castool.configuration._
   import zio.blocking.Blocking
   type Layer0Env = Configuration with Blocking with zio.console.Console
   type Layer1Env = Layer0Env with CassandraConfig with zio.clock.Clock
-  type Layer2Env = Layer1Env with CassandraSession with zio.clock.Clock
-  type AppEnv = Layer2Env with zio.console.Console
+  type Layer2Env = Layer1Env with CassandraSession// with zio.clock.Clock
+  type Layer3Env = Layer2Env with RqlService// with zio.clock.Clock
+  type AppEnv = Layer3Env with zio.console.Console
 
   val layer0: ZLayer[Blocking, Throwable, Layer0Env]  = Blocking.any ++ zio.console.Console.live ++ Configuration.live
   val layer1: ZLayer[Layer0Env, Throwable, Layer1Env] = CassandraConfig.fromConfiguration ++ zio.clock.Clock.live ++ ZLayer.identity
   val layer2: ZLayer[Layer1Env, Throwable, Layer2Env] = CassandraSession.layer ++ zio.clock.Clock.live ++ ZLayer.identity
+  val layer3: ZLayer[Layer2Env, Throwable, Layer3Env] = RqlService.layer ++ ZLayer.identity
 
-  val appLayer: ZLayer[ZEnv, Throwable, AppEnv] = layer0 >>> layer1 >>> layer2
+  val appLayer: ZLayer[ZEnv, Throwable, AppEnv] = layer0 >>> layer1 >>> layer2 >>> layer3
 }
 
