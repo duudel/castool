@@ -1,7 +1,7 @@
 import React from "react";
 import { Dispatch, useCallback, useEffect, useReducer, useRef, useState } from "react";
 import styled from 'styled-components';
-import casLogo from "./CasTool-2-icon.png";
+import casLogo from "./logo/CasTool-2-icon.png";
 import "./App.css";
 
 import { useWebsocket } from './utils/UseWebsocketHook';
@@ -10,39 +10,8 @@ import QuerySection from './QuerySection';
 import { TransformerSection } from './TransformerSection';
 
 import { Action, ActionType, reducer, initialState, State, QueryStatus } from './reducer';
-import useSessionStorage from "./utils/UseSessionStorageHook";
 
-type RqlQueryTabProps = {
-};
-
-function RqlQueryTab(props: RqlQueryTabProps) {
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const dispatchAction = useCallback((message: MessageEvent<any>) => {
-    dispatch({ type: ActionType.ON_MESSAGE, message: message.data })
-  }, []);
-  const [sendQuery, wsStatus] = useWebsocket("ws://localhost:8080/rql", dispatchAction);
-
-  const [queryInput, setQueryInput] = useSessionStorage("rql.query.input", "");
-
-  const submit = useCallback(() => {
-    console.log("Submit query: ", queryInput);
-    sendQuery(queryInput);
-  }, [queryInput]);
-
-  return (
-    <TabContainer>
-      <TopSection>
-        RQL query {wsStatus}
-        <QueryInput
-          value={queryInput}
-          onChange={ev => setQueryInput(ev.target.value)}
-          onSubmit={() => submit()}
-        />
-        <Button onClick={() => submit()}>Query</Button>
-      </TopSection>
-    </TabContainer>
-  );
-}
+import RqlQueryTab from './RqlQueryTab';
 
 function renderTab(
   tab: number,
@@ -74,36 +43,6 @@ function renderTab(
       );
   }
 }
-
-const TOP_HEIGHT="200px";
-
-const TopSection = styled.div`
-  position: sticky;
-  top: 0;
-  left: 0;
-  display: flex;
-  flex-direction: column;
-  height: ${TOP_HEIGHT};
-  padding: 2px;
-  background-color: #fff;
-`;
-
-const QueryInput = styled.textarea`
-  padding: 10px;
-  font-size: 16pt;
-  font-family: Courier;
-  border: 1px solid black;
-  width: 60%;
-`;
-
-const Button = styled.button`
-  padding: 10px;
-  font-size: 12pt;
-  background: #bbb;
-  border: 2.5px solid #989;
-  border-radius: 2px;
-`;
-
 
 function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -183,9 +122,5 @@ const TabButton = styled.button<{ selected: boolean }>`
   padding: 5px;
   ${({ selected }) => (selected ? "font-weight: bold" : "")};
   ${({ selected }) => (selected ? "background: #8f6f8f" : "")};
-`;
-
-const TabContainer = styled.div`
-  padding: 5px;
 `;
 
