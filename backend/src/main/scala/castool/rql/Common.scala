@@ -92,19 +92,19 @@ object Eval {
 
 sealed trait Callable[+A <: Value] {
   def evaluate: Eval.Eval[A]
-  def parameters: Map[String, ValueType]
+  def parameters: Seq[(String, ValueType)]
   def returnType: ValueType
 }
 
 case class FunctionDef[+A <: Value](
   evaluate: Eval.Eval[A],
-  parameters: Map[String, ValueType],
+  parameters: Seq[(String, ValueType)],
   returnType: ValueType,
 ) extends Callable[A]
 
 case class AggregationDef[+A <: Value](
   evaluate: Eval.Eval[A],
-  parameters: Map[String, ValueType],
+  parameters: Seq[(String, ValueType)],
   returnType: ValueType,
   initialValue: Value,
   finalPhase: (Value, Num) => Value,
@@ -112,28 +112,7 @@ case class AggregationDef[+A <: Value](
 
 case class SourceDef(columns: SeqMap[Name, ValueType]) {
   def get(name: Name): Option[ValueType] = columns.get(name)
-
-  def project(names: Iterable[Name]): Either[Seq[String], SourceDef] = {
-    val projected = names.map { name => name -> columns.get(name) }
-    val errors = projected.collect {
-      case (name, None) => s"No such column name as '${name.n}'"
-    }
-    if (errors.nonEmpty) {
-      Left(errors.toSeq)
-    } else {
-      val result = projected.collect {
-        case (name, Some(valueType)) => name -> valueType
-      }
-      Right(SourceDef(result))
-    }
-  }
-
-  def extend(name: Name, valueType: ValueType): Either[Seq[String], SourceDef] = {
-    // TODO: error if name is already defined
-    val item: (Name, ValueType) = (name, valueType)
-    val result = copy(columns = columns + item)
-    Right(result)
-  }
+  def add(name: Name, valueType: ValueType): SourceDef = copy(columns = columns + (name -> valueType))
 }
 
 object SourceDef {

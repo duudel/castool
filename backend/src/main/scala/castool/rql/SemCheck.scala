@@ -49,16 +49,19 @@ object SemCheck {
   type Result[+A] = ZIO[Env, Error, A]
 
   trait Env {
-    def tableDef(name: Name): Result[SourceDef]
-    def functionDef(name: Name): Result[FunctionDef[Value]]
-    def aggregationDef(name: Name): Result[AggregationDef[Value]]
+    def tableDef(name: Name): Option[SourceDef]
+    def functionDef(name: Name): Option[FunctionDef[Value]]
+    def aggregationDef(name: Name): Option[AggregationDef[Value]]
   }
 
   def check(ast: Ast.Source): Result[Checked.Source] = {
     ast match {
       case Ast.Table(name, tok) =>
         for {
-          tableDef <- ZIO.accessM[Env] { env => env.tableDef(name) }
+          tableDef <- ZIO.accessM[Env] { env =>
+            ZIO.fromOption(env.tableDef(name))
+              .mapError(_ => Error(s"No such table as '${name.n}' found", Location(tok.pos)))
+          }
         } yield Checked.Table(name, tableDef)
       case Ast.Cont(source, op) =>
         for {
@@ -69,47 +72,57 @@ object SemCheck {
   }
 
   def checkOp(ast: Ast.TopLevelOp, source: Checked.Source): Result[Checked.TopLevelOp] = {
+    val sourceDef = source.sourceDef
     ast match {
       case Ast.Where(expr, pos) =>
         for {
-          checkedExpr <- checkTypedExpr[Bool](expr, source.sourceDef)
-        } yield Checked.Where(checkedExpr, source.sourceDef)
+          checkedExpr <- checkTypedExpr[Bool](expr, sourceDef)
+        } yield Checked.Where(checkedExpr, sourceDef)
       case Ast.Project(nameAndTok, pos) =>
-        val names = nameAndTok.map(_.name)
-        source.sourceDef.project(names) match {
-          case Right(projectedDef) =>
-            ZIO.succeed(Checked.Project(names, projectedDef))
-          case Left(errors) =>
-            ZIO.fail(Error(errors.head, Location(nameAndTok.head.tok.pos)))
+        val projected = nameAndTok.map {
+          case NameAndToken(name, tok) => name -> (sourceDef.get(name) -> tok)
+        }
+        val errors = projected.collect {
+          case (name, (None, tok)) => (s"No such column name as '${name.n}'", tok.pos)
+        }
+        if (errors.nonEmpty) {
+          val (error, pos) = errors.head
+          ZIO.fail(Error(error, Location(pos)))
+        } else {
+          val result = projected.collect {
+            case (name, (Some(valueType), _)) => name -> valueType
+          }
+          val names = nameAndTok.map(_.name)
+          val projectedDef = SourceDef(result)
+          ZIO.succeed(Checked.Project(names, projectedDef))
         }
       case Ast.Extend(name, expr, pos) =>
         for {
-          checkedExpr <- checkExpr(expr, source.sourceDef)
-          extendedDef <- source.sourceDef.extend(name.name, checkedExpr.resultType) match {
-            case Right(extendedDef) => ZIO.succeed(extendedDef)
-            case Left(errors)       => ZIO.fail(Error(errors.head, Location(name.tok.pos)))
-          }
-        } yield Checked.Extend(name.name, checkedExpr, extendedDef)
+          checkedExpr <- checkExpr(expr, sourceDef)
+        } yield {
+          val extendedDef = sourceDef.add(name.name, checkedExpr.resultType)
+          Checked.Extend(name.name, checkedExpr, extendedDef)
+        }
       case Ast.OrderBy(names, order, pos) =>
-        val projected = names.map { name => name -> source.sourceDef.get(name.name) }
+        val projected = names.map { name => name -> sourceDef.get(name.name) }
         val errors = projected.collect {
           case (name, None) => name.tok.pos -> s"No such column name as '${name.name.n}'"
         }
         if (errors.nonEmpty) {
           ZIO.fail(Error(errors.head._2, Location(errors.head._1)))
         } else {
-          val result = Checked.OrderBy(names.map(_.name), order, source.sourceDef)
+          val result = Checked.OrderBy(names.map(_.name), order, sourceDef)
           ZIO.succeed(result)
         }
       case Ast.Summarize(aggregations, groupBy, pos) =>
         for {
           checkedAggregations <- ZIO.foreach(aggregations) { case Ast.Aggregation(nameAndTok, aggr) =>
             for {
-              checkedAggrCall <- checkAggregationCall(aggr, source.sourceDef)
+              checkedAggrCall <- checkAggregationCall(aggr, sourceDef)
             } yield Checked.Aggregation(nameAndTok.name, checkedAggrCall)
           }
           checkedGroupBy <- ZIO.foreach(groupBy) { case NameAndToken(name, tok) =>
-            ZIO.fromOption(source.sourceDef.get(name))
+            ZIO.fromOption(sourceDef.get(name))
               .map(valueType => name -> valueType)
               .mapError(_ => Error(s"No such column as '${name.n}', used in group by", Location(tok.pos)))
           }
@@ -156,7 +169,8 @@ object SemCheck {
           checkedExprB <- checkExpr(exprB, sourceDef)
           resultType <- checkBinaryOp(op, checkedExprA, checkedExprB)
         } yield Checked.BinaryExpr(op, checkedExprA, checkedExprB, resultType)
-      case fc: Ast.FunctionCall => checkFunctionCall(fc, sourceDef)
+      case fc: Ast.FunctionCall =>
+        checkFunctionCall(fc, sourceDef)
     }
   }
 
@@ -210,14 +224,20 @@ object SemCheck {
 
   def checkFunctionCall(ast: Ast.FunctionCall, sourceDef: SourceDef): Result[Checked.FunctionCall[Value]] = {
     for {
-      functionDef <- ZIO.accessM[Env] { env => env.functionDef(ast.functionName) }
+      functionDef <- ZIO.accessM[Env] { env =>
+        ZIO.fromOption(env.functionDef(ast.functionName))
+          .mapError(_ => Error(s"No such function as '${ast.functionName.n}' found", Location(ast.pos)))
+      }
       args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
     } yield Checked.FunctionCall(functionDef, args.toSeq)
   }
 
   def checkAggregationCall(ast: Ast.FunctionCall, sourceDef: SourceDef): Result[Checked.AggregationCall[Value]] = {
     for {
-      aggregationDef <- ZIO.accessM[Env] { env => env.aggregationDef(ast.functionName) }
+      aggregationDef <- ZIO.accessM[Env] { env =>
+        ZIO.fromOption(env.aggregationDef(ast.functionName))
+          .mapError(_ => Error(s"No such aggregation function as '${ast.functionName.n}' found", Location(ast.pos)))
+      }
       args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
     } yield Checked.AggregationCall(aggregationDef, args.toSeq)
   }

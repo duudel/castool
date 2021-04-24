@@ -98,6 +98,42 @@ object RqlService {
     rql.SourceDef(sourceDef)
   }
 
+  val b64decoder = java.util.Base64.getDecoder()
+
+  val atob = (blob: rql.Str) => {
+    val bytes = b64decoder.decode(blob.v)
+    rql.Str(new String(bytes))
+  }
+
+  class Functions {
+    private val functions: scala.collection.mutable.Map[String, rql.FunctionDef[_ <: rql.Value]] = scala.collection.mutable.Map.empty
+    private val aggregations: scala.collection.mutable.Map[String, rql.AggregationDef[_ <: rql.Value]] = scala.collection.mutable.Map.empty
+    def functionDef(name: rql.Name): Option[rql.FunctionDef[rql.Value]] = functions.get(name.n)
+    def aggregationDef(name: rql.Name): Option[rql.AggregationDef[rql.Value]] = aggregations.get(name.n)
+
+    def addFunction[R <: rql.Value](name: rql.Name, parameters: Seq[(String, rql.ValueType)], eval: rql.Eval.Eval[R])(implicit mapper: rql.ValueTypeMapper[R]): Functions = {
+      val resultType = mapper.valueType
+      val fd = rql.FunctionDef(eval, parameters, resultType)
+      functions.+=(name.n -> fd)
+      this
+    }
+
+    def addAggregation[R <: rql.Value](
+      name: rql.Name, parameters: Seq[(String, rql.ValueType)], init: rql.Value, eval: rql.Eval.Eval[R], finalPahase: (rql.Value, Double) => rql.Value
+    )(implicit mapper: rql.ValueTypeMapper[R]): Functions = {
+      val resultType = mapper.valueType
+      val fd = rql.FunctionDef(eval, parameters, resultType)
+      functions.+=(name.n -> fd)
+      this
+    }
+  }
+
+  import rql.ResolveValueType._
+  import rql.Name.NameInterpolator
+
+  val builtins = new Functions()
+    .addFunction(n"atob", Seq("b" -> rql.ValueType.Str), rql.Eval(atob))
+
   private class ServiceImpl(casSession: cassandra.CassandraSession.Service) extends Service {
     def compilationEnv: IO[Throwable, rql.Compiler.Env] = {
       def convertTable(table: cassandra.Table): rql.SourceDef = convertColumnDefsToSourceDef(table.columnDefs)
@@ -113,30 +149,12 @@ object RqlService {
           kstabs
         }.toMap
 
-        def tableDef(name: Name): SemCheck.Result[SourceDef] = {
-          ZIO.fromOption(tables.get(name.n))
-            .mapError(_ => SemCheck.Error(s"No such table as '${name.n}'", rql.Location(0)))
+        def tableDef(name: Name): Option[SourceDef] = {
+          tables.get(name.n)
         }
-        
-        val b64decoder = java.util.Base64.getDecoder()
 
-        def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] = {
-          if (name.n == "atob") {
-            val atob = (blob: rql.Str) => {
-              val bytes = b64decoder.decode(blob.v)
-              rql.Str(new String(bytes))
-            }
-            val funcDef = FunctionDef(
-              evaluate = rql.Eval(atob),
-              parameters = Map("blob" -> rql.ValueType.Str),
-              returnType = rql.ValueType.Str
-            )
-            ZIO.succeed(funcDef)
-          } else {
-            ZIO.fail(SemCheck.Error(s"No such function as s'${name.n}'", rql.Location(0)))
-          }
-        }
-        def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] = ???
+        def functionDef(name: Name): Option[FunctionDef[Value]] = builtins.functionDef(name)
+        def aggregationDef(name: Name): Option[AggregationDef[Value]] = builtins.aggregationDef(name)
       }
     }
 
