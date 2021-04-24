@@ -62,14 +62,16 @@ function App() {
   return (
     <AppContainer>
       <Header>
-        <AppLogo src={casLogo} alt="cassandra-tool-logo" idle={logoIdle} />
-        <h1>Cassandra Tool</h1>
-        <ConnectionInfo>{wsStatus}</ConnectionInfo>
+        <HeaderMain>
+          <AppLogo src={casLogo} alt="cassandra-tool-logo" idle={logoIdle} />
+          <h1>Cassandra Tool</h1>
+          <ConnectionInfo>{wsStatus}</ConnectionInfo>
+        </HeaderMain>
+        <TabButtonStrip>
+          <TabButton selected={tab === 0} onClick={() => setTab(0)}>CQL Query</TabButton>
+          <TabButton selected={tab === 1} onClick={() => setTab(1)}>RQL Query</TabButton>
+        </TabButtonStrip>
       </Header>
-      <div>
-        <TabButton selected={tab === 0} onClick={() => setTab(0)}>CQL Query</TabButton>
-        <TabButton selected={tab === 1} onClick={() => setTab(1)}>RQL Query</TabButton>
-      </div>
       {renderTab(tab, state, dispatch, qref, tref, splitContainerRef, sendQuery)}
     </AppContainer>
   );
@@ -97,6 +99,17 @@ const Header = styled.header`
   background-color: #282c34;
   height: 12vh;
   display: flex;
+  flex-direction: column;
+
+  font-family: "Courier";
+  font-style: italic;
+  font-size: calc(8px + 1vmin);
+  color: white;
+`;
+
+const HeaderMain = styled.header`
+  background-color: #282c34;
+  display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
@@ -105,6 +118,18 @@ const Header = styled.header`
   font-style: italic;
   font-size: calc(8px + 1vmin);
   color: white;
+`;
+
+const TabButtonStrip = styled.div`
+  margin-top: -10px;
+`;
+
+const TabButton = styled.button<{ selected: boolean }>`
+  cursor: pointer;
+  padding: 5px;
+  background: #8f6f8f;
+  ${({ selected }) => (selected ? "font-weight: bold" : "")};
+  ${({ selected }) => (selected ? "background: #fff; border-bottom: 0" : "")};
 `;
 
 const ConnectionInfo = styled.div`
@@ -116,11 +141,5 @@ const ConnectionInfo = styled.div`
 
 const SplitContainer = styled.div`
   height: 88vh;
-`;
-
-const TabButton = styled.button<{ selected: boolean }>`
-  padding: 5px;
-  ${({ selected }) => (selected ? "font-weight: bold" : "")};
-  ${({ selected }) => (selected ? "background: #8f6f8f" : "")};
 `;
 
