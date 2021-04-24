@@ -119,11 +119,11 @@ object RqlService {
     }
 
     def addAggregation[R <: rql.Value](
-      name: rql.Name, parameters: Seq[(String, rql.ValueType)], init: rql.Value, eval: rql.Eval.Eval[R], finalPahase: (rql.Value, Double) => rql.Value
+      name: rql.Name, parameters: Seq[(String, rql.ValueType)], init: rql.Value, eval: rql.Eval.Eval[R], finalPhase: (rql.Value, rql.Num) => rql.Value
     )(implicit mapper: rql.ValueTypeMapper[R]): Functions = {
       val resultType = mapper.valueType
-      val fd = rql.FunctionDef(eval, parameters, resultType)
-      functions.+=(name.n -> fd)
+      val fd = rql.AggregationDef(eval, parameters, resultType, init, finalPhase)
+      aggregations.+=(name.n -> fd)
       this
     }
   }
