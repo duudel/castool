@@ -16,12 +16,12 @@ interface QueryResult {
 
 interface State {
   queryResult: QueryResult | null;
-  queryError: string | null;
+  queryErrors: string[] | null;
 }
 
 const initialState: State = {
   queryResult: null,
-  queryError: null,
+  queryErrors: null,
 };
 
 enum ActionType {
@@ -77,7 +77,7 @@ interface RqlMessageSuccess {
 }
 interface RqlMessageError {
   _type: "Error";
-  error: string;
+  errors: string[];
 }
 interface RqlMessageRows {
   _type: "Rows";
@@ -95,9 +95,9 @@ const reducer = (state: State, action: Action): State => {
       console.log("Message", message);
       switch (message._type) {
         case "Success":
-          return { ...state, queryResult: { columns: message.columns, rows: []}, queryError: null };
+          return { ...state, queryResult: { columns: message.columns, rows: []}, queryErrors: null };
         case "Error":
-          return { ...state, queryResult: null, queryError: message.error };
+          return { ...state, queryResult: null, queryErrors: message.errors };
         case "Rows":
           const { columns = [], rows = [] } = state.queryResult || {};
           return { ...state, queryResult: { columns, rows: rows.concat(message.rows) } };
@@ -243,7 +243,12 @@ function RqlQueryTab(props: RqlQueryTabProps) {
         />
         <Button onClick={() => submit()}>Query</Button>
       </TopSection>
-      {state.queryError && <div>{state.queryError}</div>}
+      {state.queryErrors && (
+        <div>
+        {state.queryErrors.map((error, line) => <div key={"error-line" + line}>{error}</div>)
+        }
+        </div>
+      )}
       {state.queryResult && (
         <>
           <ResultCounter><span>{resultsNum}</span> results</ResultCounter>

@@ -21,6 +21,7 @@ object RqlService {
   case class ResultRow(num: Long, columns: Seq[rql.Value]) extends Product with Serializable
 
   case class Error(msg: String, loc: Option[rql.SourceLocation]) extends Product with Serializable
+  type Errors = Seq[Error]
 
   case class QueryResult(
     columnDefs: Seq[(String, rql.ValueType)],
@@ -28,8 +29,8 @@ object RqlService {
   ) extends Product with Serializable
 
   trait Service {
-    def compile(q: String): IO[Error, Unit]
-    def query(q: String): IO[Error, QueryResult]
+    def compile(q: String): IO[Errors, Unit]
+    def query(q: String): IO[Errors, QueryResult]
   }
 
   def convertDataType(ct: ColumnValue.DataType.Value): rql.ValueType = ct match {
@@ -161,7 +162,7 @@ object RqlService {
     def executionEnv = {
       for {
         metadata <- casSession.metadata
-          .mapError(t => Error(t.getMessage(), None))
+          .mapError(t => Error(t.getMessage(), None) :: Nil)
       } yield new rql.Execution.Env {
         val tables: Map[String, (cassandra.Keyspace, cassandra.Table)] = metadata.keyspaces.flatMap { keyspace =>
           val kstabs: Seq[(String, (cassandra.Keyspace, cassandra.Table))] = keyspace.tables.toSeq.map {
@@ -198,23 +199,25 @@ object RqlService {
       }
     }
 
-    def compile(q: String): zio.IO[Error, Unit] = {
+    def compile(q: String): zio.IO[Errors, Unit] = {
       val result = for {
-        env <- compilationEnv.mapError(t => Error(t.getMessage(), None))
-        result <- rql.Compiler.compileQuery(q).provide(env)
-          .mapError(err => Error(err.error, Some(err.loc)))
-      } yield result
+        env <- compilationEnv.mapError(t => Error(t.getMessage(), None) :: Nil)
+        compiled <- rql.Compiler.compileQuery(q).provide(env)
+          .mapError(errors => errors.map(err =>
+              Error(err.message, Some(err.loc)))
+          )
+      } yield compiled
 
       result.as(())
     }
 
-    def query(q: String): zio.IO[Error, QueryResult] = {
+    def query(q: String): zio.IO[Errors, QueryResult] = {
       val result = for {
-        env <- compilationEnv
-          .mapError(t => Error(t.getMessage(), None))
-        compiled <- rql.Compiler.compileQuery(q)
-          .mapError(err => Error(err.error, Some(err.loc)))
-          .provide(env)
+        env <- compilationEnv.mapError(t => Error(t.getMessage(), None) :: Nil)
+        compiled <- rql.Compiler.compileQuery(q).provide(env)
+          .mapError(errors => errors.map(err =>
+              Error(err.message, Some(err.loc)))
+          )
         execEnv <- executionEnv
         live = rql.Execution.live(execEnv)
         stream = rql.Execution.run(compiled)
@@ -243,7 +246,7 @@ object RqlService {
     )
   }
 
-  def query(q: String): ZIO[RqlService, Error, QueryResult] = ZIO.accessM[RqlService](_.get.query(q))
+  def query(q: String): ZIO[RqlService, Errors, QueryResult] = ZIO.accessM[RqlService](_.get.query(q))
 
 }
 

@@ -25,30 +25,32 @@ object Compiled {
 }
 
 object Compiler {
-  case class Error(error: String, loc: SourceLocation)
+  case class Error(message: String, loc: SourceLocation)
+  type Errors = Seq[Error]
 
   trait Env extends SemCheck.Env {
   }
 
-  type CompiledIO[A] = ZIO[Env, Error, A]
+  type CompiledIO[A] = ZIO[Env, Errors, A]
 
   def compileQuery(q: String): CompiledIO[Compiled.Source] = {
     for {
       tokens <- Lexer.lex(q) match {
-          case Lexer.Success(tokens) =>
-            ZIO.succeed(tokens)
-          case Lexer.Failure(msg, loc) =>
-            ZIO.fail(Error(msg, loc.atSourceText(q)))
-        }
+        case Lexer.Success(tokens) =>
+          ZIO.succeed(tokens)
+        case Lexer.Failure(msg, location) =>
+          ZIO.fail(Error(msg, location.atSourceText(q)) :: Nil)
+      }
       ast <- Parser.parse(tokens) match {
-          case Parser.Success(ast) =>
-            ZIO.succeed(ast)
-          case Parser.Failure(msg, location) =>
-            ZIO.fail(Error(msg, location.atSourceText(q)))
-        }
+        case Parser.Success(ast) =>
+          ZIO.succeed(ast)
+        case Parser.Failure(errors) =>
+          val errs = errors.map(err => Error(err.message, err.loc.atSourceText(q)))
+          ZIO.fail(errs)
+      }
       checked <- SemCheck.check(ast).mapError {
         case SemCheck.Error(msg, location) =>
-          Error(msg, location.atSourceText(q))
+          Error(msg, location.atSourceText(q)) :: Nil
       }
       result <- compile(checked)
     } yield result
@@ -107,23 +109,11 @@ object Compiler {
       case Checked.NullLit =>
         ZIO.succeed((input: InputRow) => Null.asInstanceOf[A])
       case Checked.TrueLit | Checked.FalseLit =>
-        if (expr.resultType != ValueType.Bool) {
-          ZIO.fail(Error(s"Boolean expression expected, got '${expr.resultType}'", SourceLocation(0, 0)))
-        } else {
-          ZIO.succeed((input: InputRow) => Bool(expr == Checked.TrueLit).asInstanceOf[A])
-        }
+        ZIO.succeed((input: InputRow) => Bool(expr == Checked.TrueLit).asInstanceOf[A])
       case Checked.NumberLit(value) =>
-        if (expr.resultType != ValueType.Num) {
-          ZIO.fail(Error(s"Numerical expression expected, got '${expr.resultType}'", SourceLocation(0, 0)))
-        } else {
-          ZIO.succeed((input: InputRow) => Num(value).asInstanceOf[A])
-        }
+        ZIO.succeed((input: InputRow) => Num(value).asInstanceOf[A])
       case Checked.StringLit(value) =>
-        if (expr.resultType != ValueType.Str) {
-          ZIO.fail(Error(s"String expression expected, got '${expr.resultType}'", SourceLocation(0, 0)))
-        } else {
-          ZIO.succeed((input: InputRow) => Str(value).asInstanceOf[A])
-        }
+        ZIO.succeed((input: InputRow) => Str(value).asInstanceOf[A])
       case Checked.UnaryExpr(op, expr) =>
         for {
           compiledExpr <- compileExpr(expr)

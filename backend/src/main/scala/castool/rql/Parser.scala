@@ -3,10 +3,12 @@ package castool.rql
 import scala.reflect.ClassTag
 
 object Parser {
+  case class Error(message: String, loc: Location) extends Serializable with Product
+
   sealed trait Result
 
   final case class Success(ast: Ast.Source) extends Result
-  final case class Failure(error: String, loc: Location) extends Result
+  final case class Failure(errors: Seq[Error]) extends Result
 
   case class Input(current: Option[Token], tokens: Iterable[Token]) {
     def hasInput: Boolean = current.nonEmpty
@@ -37,12 +39,12 @@ object Parser {
       def isOk: Boolean = true
       def isError: Boolean = false
     }
-    final case class Nok(input: Input, message: String) extends St[Nothing] {
+    final case class Nok(input: Input, messages: Seq[String]) extends St[Nothing] {
       def result = throw new NoSuchElementException("Nok.result")
       def isOk: Boolean = false
       def isError: Boolean = false
     }
-    final case class Error(input: Input, message: String) extends St[Nothing] {
+    final case class Error(input: Input, messages: Seq[String]) extends St[Nothing] {
       def result = throw new NoSuchElementException("Error.result")
       def isOk: Boolean = false
       def isError: Boolean = true
@@ -53,6 +55,10 @@ object Parser {
 
   object P {
     implicit class Pops[A](p: Parser[A]) {
+      @inline def mapNok(f: St.Nok => St[A]): Parser[A] = p.andThen {
+        case nok: St.Nok => f(nok)
+        case x           => x
+      }
       @inline def ~[B](other: Parser[B]): Parser[(A, B)] = (st: St[Any]) => {
         if (st.isError) st.map(_.asInstanceOf[(A, B)]) else {
           p(st) match {
@@ -66,10 +72,18 @@ object Parser {
         p(st) match {
           case ok: St.Ok[_] =>
             other(ok).map(b => (ok.result, b)) match {
-              case nok: St.Nok => St.Error(nok.input, nok.message)
-              case x => x
+              case nok: St.Nok =>
+                println("~! nok: " + nok)
+                St.Error(nok.input, nok.messages)
+              case err: St.Error =>
+                println("~! err: " + err)
+                err
+              case x: St.Ok[_] =>
+                println("~! ok input: " + x.input)
+                println("   ok result: " + x.result)
+                x
             }
-          case nok: St.Nok => St.Error(nok.input, nok.message)
+          case nok: St.Nok => nok
           case err: St.Error => err
         }
       }
@@ -102,6 +116,9 @@ object Parser {
       @inline def *(): Parser[Seq[A]] = many(p)
       @inline def *[S](separator: Parser[S]): Parser[Seq[A]] = manyWithSeparator(p, separator)
       @inline def *[S1, S2](sep1: Parser[S1], sep2: Parser[S2]): Parser[Seq[A]] = manyWithSeparator(p, sep1, sep2)
+      @inline def +(): Parser[Seq[A]] = oneOrMore(p)
+      @inline def +[S](separator: Parser[S]): Parser[Seq[A]] = oneOrMoreWithSeparator(p, separator)
+      @inline def +[S1, S2](sep1: Parser[S1], sep2: Parser[S2]): Parser[Seq[A]] = oneOrMoreWithSeparator(p, sep1, sep2)
       @inline def map[B](f: A => B): Parser[B] = (st: St[Any]) => {
         p(st).map(f)
       }
@@ -117,8 +134,8 @@ object Parser {
             case t: Token if t.getClass() == tclass =>
               St.Ok(input.advance, t.asInstanceOf[T])
             case t =>
-              St.Nok(input, s"Expected $tokenKind, got ${t.getClass.getSimpleName}")
-          }.getOrElse(St.Nok(input, s"Expected $tokenKind, but reached end of input"))
+              St.Nok(input, Seq(s"Expected $tokenKind, got '${t.display}'"))
+          }.getOrElse(St.Nok(input, Seq(s"Expected $tokenKind, but reached end of input")))
         case nok: St.Nok => nok.map(_.asInstanceOf[T])
         case err: St.Error => err.map(_.asInstanceOf[T])
       }
@@ -129,9 +146,9 @@ object Parser {
         identSt match {
           case St.Ok(_, result) if result.value == s =>
             identSt
-          case St.Ok(input, result) => St.Nok(input, s"Expected '$s', got ${result.value}")
-          case nok: St.Nok => St.Nok(nok.input, s"Expected '$s'")
-          case err: St.Error => St.Error(err.input, s"Expected '$s'")
+          case St.Ok(input, result) => St.Nok(input, Seq(s"Expected '$s', got ${result.value}"))
+          case nok: St.Nok => St.Nok(nok.input, Seq(s"Expected '$s'"))
+          case err: St.Error => St.Error(err.input, Seq(s"Expected '$s'"))
         }
       })
     }
@@ -142,10 +159,10 @@ object Parser {
           case St.Ok(input, result) =>
             Name.fromString(result.value) match {
               case Right(name) => St.Ok(input, NameAndToken(name, result))
-              case Left(error) => St.Nok(input, error)
+              case Left(error) => St.Nok(input, Seq(s"Expected name identified: $error"))
             }
-          case nok: St.Nok => St.Nok(nok.input, s"Expected name")
-          case err: St.Error => St.Error(err.input, s"Expected name")
+          case nok: St.Nok => St.Nok(nok.input, Seq(s"Expected name identifier"))
+          case err: St.Error => St.Error(err.input, Seq(s"Expected name identifier"))
         }
       })
     }
@@ -156,21 +173,22 @@ object Parser {
     }
 
     def any[A](ps: Parser[A]*): Parser[A] = (st: St[Any]) => {
-      var result: St.Ok[A] = null
-      ps.foreach { p =>
+      var result: St[A] = null
+      val noks = scala.collection.mutable.Buffer.empty[St.Nok]
+      val pIt = ps.iterator
+      while (result == null && pIt.hasNext) {
+        val p = pIt.next()
         p(st) match {
-          case ok: St.Ok[A] if result == null => result = ok
-          case _ =>
+          case ok: St.Ok[A] => result = ok
+          case err: St.Error => result = err
+          case nok: St.Nok => noks += nok
         }
       }
-      if (result == null) St.Nok(st.input, "Did not match any") else result
-      //.map(p => p(st))
-      //.find(s => s.isOk || s.isError)
-      ////.map {
-      ////  case ok: St.Ok[A] => ok
-      ////  case error: St.Error => error
-      ////}
-      //.getOrElse(St.Nok(st.input, "no match for any"))
+      if (result == null) {
+        St.Nok(st.input, Seq("Did not match any") ++ noks.flatMap(_.messages))
+      } else {
+        result
+      }
     }
 
     def many[A](p: Parser[A]): Parser[Seq[A]] = (st: St[Any]) => {
@@ -182,7 +200,11 @@ object Parser {
           results += s.result
           s = p(s)
         }
-        St.Ok(s.input, results.toSeq)
+        s match {
+          case err: St.Error => err
+          case _ =>
+            St.Ok(s.input, results.toSeq)
+        }
       } else {
         st.map(_ => Nil)
       }
@@ -194,15 +216,17 @@ object Parser {
       val results = scala.collection.mutable.Buffer.empty[A]
       var s = p(st)
       while (s.isOk) {
-        //println(s"* $s")
         results += s.result
         s = separator(s).map(_.asInstanceOf[A])
-        //println(s"* $s")
         if (s.isOk) {
           s = p(s)
         }
       }
-      St.Ok(s.input, results.toSeq)
+      s match {
+        case err: St.Error => err
+        case _ =>
+          St.Ok(s.input, results.toSeq)
+      }
     }
 
     def manyWithSeparator[A, S1, S2](p: Parser[A], sep1: Parser[S1], sep2: Parser[S2]): Parser[Seq[A]] = sep1 ~> ((st: St[Any]) => {
@@ -211,15 +235,78 @@ object Parser {
       val results = scala.collection.mutable.Buffer.empty[A]
       var s = p(st)
       while (s.isOk) {
-        //println(s"* $s")
         results += s.result
         s = sep2(s).map(_.asInstanceOf[A])
-        //println(s"* $s")
         if (s.isOk) {
           s = p(s)
         }
       }
-      St.Ok(s.input, results.toSeq)
+      s match {
+        case err: St.Error => err
+        case _ =>
+          St.Ok(s.input, results.toSeq)
+      }
+    })
+
+    def oneOrMore[A](p: Parser[A]): Parser[Seq[A]] = (st: St[Any]) => {
+      var s = p(st)
+      if (!s.isOk) {
+        s.map(_ => Nil)
+      } else {
+        val results = scala.collection.mutable.Buffer.empty[A]
+        while (s.isOk) {
+          results += s.result
+          s = p(s)
+        }
+        s match {
+          case err: St.Error => err
+          case _             => St.Ok(s.input, results.toSeq)
+        }
+      }
+    }
+
+    def oneOrMoreWithSeparator[A, S](p: Parser[A], separator: Parser[S]): Parser[Seq[A]] = (st: St[Any]) => {
+      var s = p(st)
+      if (!s.isOk) {
+        s.map(_ => Nil)
+      } else {
+        val results = scala.collection.mutable.Buffer.empty[A]
+        while (s.isOk) {
+          results += s.result
+
+          s = separator(s).map(_.asInstanceOf[A])
+          if (s.isOk) {
+            s = p(s)
+          }
+        }
+        s match {
+          case err: St.Error => err
+          case _ =>
+            St.Ok(s.input, results.toSeq)
+        }
+      }
+    }
+
+    def oneOrMoreWithSeparator[A, S1, S2](p: Parser[A], sep1: Parser[S1], sep2: Parser[S2]): Parser[Seq[A]] = sep1 ~> ((st: St[Any]) => {
+      var s = p(st)
+      if (!s.isOk) {
+        s.map(_ => Nil)
+      } else {
+        val results = scala.collection.mutable.Buffer.empty[A]
+        while (s.isOk) {
+          results += s.result
+
+          s = sep2(s).map(_.asInstanceOf[A])
+          if (s.isOk) {
+            s = p(s)
+          }
+        }
+        s match {
+          case err: St.Error => err
+          case _ =>
+            St.Ok(s.input, results.toSeq)
+        }
+      }
     })
 
     def logical_expr[OpTok <: Token.LogicalOp: ClassTag](subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
@@ -356,7 +443,9 @@ object Parser {
         Ast.OrderBy(names, order, pos = o.pos)
       }
       lazy val summarize: Parser[Ast.Summarize] = (acceptIdent("summarize")
-        ~! (acceptName ~ (accept[Token.OpAssign] ~> funcCall_expr)).*(accept[Token.Comma])
+        ~! (acceptName ~ (accept[Token.OpAssign] ~> funcCall_expr))
+            .+(accept[Token.Comma])
+            .mapNok(nok => St.Nok(nok.input, Seq(s"summarize expects assignments of aggregation functions, but parsing failed with:") ++ nok.messages))
         ~? (acceptIdent("by") ~ acceptName.*(accept[Token.Comma]))).map {
           case ((s, aggrs), groupByOpt) =>
             val aggregations = aggrs.map { case (nameAndTok, aggr) => Ast.Aggregation(nameAndTok, aggr) }
@@ -380,9 +469,17 @@ object Parser {
   def parse[A](tokens: Iterable[Token]): Result = {
     parseWith(tokens, G.toplevel) match {
       case St.Ok(Input(None, _), ast) => Success(ast)
-      case St.Ok(Input(Some(current), _), ast) => Failure("Unrecognized input after succesfully parsed query: " + current.display, Location(current.pos))
-      case St.Nok(input, message) => Failure(message, if (input.hasInput) Location(input.current.get.pos) else Location(-1))
-      case St.Error(input, message) => Failure(message, if (input.hasInput) Location(input.current.get.pos) else Location(-1))
+      case St.Ok(Input(Some(current), _), ast) =>
+        val error = Error("Unrecognized input after succesfully parsed query: " + current.display, Location(current.pos))
+        Failure(Seq(error))
+      case St.Nok(input, messages) =>
+        val location = if (input.hasInput) Location(input.current.get.pos) else Location(-1)
+        val errors = messages.map(msg => Error(msg, location))
+        Failure(errors)
+      case St.Error(input, messages) =>
+        val location = if (input.hasInput) Location(input.current.get.pos) else Location(-1)
+        val errors = messages.map(msg => Error(msg, location))
+        Failure(errors)
     }
   }
 

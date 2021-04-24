@@ -61,9 +61,19 @@ class CasService[R <: CasService.AppEnv] { //[F[_]: Effect: ContextShift] extend
             ZStream(RqlMessage.Finished)
         }
         queryResult.catchAll {
-          error: RqlService.Error =>
-            println(s"Here is error: $error")
-            ZIO.succeed(ZStream(RqlMessage.Error(error.msg)))
+          serviceErrors: Seq[RqlService.Error] =>
+            val errors = serviceErrors.map { error =>
+              error.loc match {
+                case Some(loc) =>
+                  val line = loc.line
+                  val column = loc.column
+                  s"$line:$column: " + error.msg
+                case None =>
+                  error.msg
+              }
+            }
+            val errorMessage = RqlMessage.Error(errors)
+            ZIO.succeed(ZStream(errorMessage))
         }
       }
 

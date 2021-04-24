@@ -161,63 +161,65 @@ object SemCheck {
       case Ast.UnaryExpr(op, expr, pos) =>
         for {
           checkedExpr <- checkExpr(expr, sourceDef)
-          _ <- checkUnaryOp(op, checkedExpr)
+          _ <- checkUnaryOp(op, pos, checkedExpr)
         } yield Checked.UnaryExpr(op, checkedExpr)
       case Ast.BinaryExpr(op, exprA, exprB, pos) =>
         for {
           checkedExprA <- checkExpr(exprA, sourceDef)
           checkedExprB <- checkExpr(exprB, sourceDef)
-          resultType <- checkBinaryOp(op, checkedExprA, checkedExprB)
+          resultType <- checkBinaryOp(op, pos, checkedExprA, checkedExprB)
         } yield Checked.BinaryExpr(op, checkedExprA, checkedExprB, resultType)
       case fc: Ast.FunctionCall =>
         checkFunctionCall(fc, sourceDef)
     }
   }
 
-  def checkUnaryOp(op: UnaryOp, expr: Checked.Expr[_]): Result[ValueType] = {
+  def checkUnaryOp(op: UnaryOp, pos: Int, expr: Checked.Expr[_]): Result[ValueType] = {
+    def fail(err: String): Result[Nothing] = ZIO.fail(Error(err, Location(pos)))
     op match {
       case UnaryOp.Plus | UnaryOp.Minus =>
         expr.resultType match {
           case ValueType.Num => ZIO.succeed(ValueType.Num)
-          case a => ZIO.fail(Error(s"Incompatible type $a for unary operator ${op.display}", Location(0))) // TODO: location
+          case a => fail(s"Incompatible type $a for unary operator ${op.display}")
         }
       case UnaryOp.Not =>
         expr.resultType match {
           case ValueType.Bool => ZIO.succeed(ValueType.Bool)
-          case a => ZIO.fail(Error(s"Incompatible type $a for unary operator ${op.display}", Location(0))) // TODO: location
+          case a => fail(s"Incompatible type $a for unary operator ${op.display}")
         }
     }
   }
 
-  def checkBinaryOp(op: BinaryOp, exprA: Checked.Expr[_], exprB: Checked.Expr[_]): Result[ValueType] = {
+  def checkBinaryOp(op: BinaryOp, pos: Int, exprA: Checked.Expr[_], exprB: Checked.Expr[_]): Result[ValueType] = {
+    def fail(err: String): Result[Nothing] = ZIO.fail(Error(err, Location(pos)))
     op match {
       case BinaryOp.Plus =>
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Num, ValueType.Num) => ZIO.succeed(ValueType.Num)
           case (ValueType.Str, ValueType.Str) => ZIO.succeed(ValueType.Str)
-          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
+          case (a, b) => fail(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.Minus | BinaryOp.Multiply | BinaryOp.Divide =>
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Num, ValueType.Num) => ZIO.succeed(ValueType.Num)
-          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
+          case (a, b) => fail(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.Equal | BinaryOp.NotEqual | BinaryOp.Less | BinaryOp.LessEq | BinaryOp.Greater | BinaryOp.GreaterEq | BinaryOp.Assign =>
         if (exprA.resultType == exprB.resultType) {
           ZIO.succeed(ValueType.Bool)
         } else {
           val (a, b) = (exprA.resultType, exprB.resultType)
-          ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
+          fail(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.Contains | BinaryOp.NotContains =>
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Str, ValueType.Str) => ZIO.succeed(ValueType.Bool)
-          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
+          case (a, b) => fail(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.And | BinaryOp.Or =>
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Bool, ValueType.Bool) => ZIO.succeed(ValueType.Bool)
-          case (a, b) => ZIO.fail(Error(s"Incompatible types for expression $a ${op.display} $b", Location(0)))
+          case (a, b) => fail(s"Incompatible types for expression $a ${op.display} $b")
         }
     }
   }
@@ -228,6 +230,7 @@ object SemCheck {
         ZIO.fromOption(env.functionDef(ast.functionName))
           .mapError(_ => Error(s"No such function as '${ast.functionName.n}' found", Location(ast.pos)))
       }
+      // TODO: check parameters
       args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
     } yield Checked.FunctionCall(functionDef, args.toSeq)
   }
@@ -238,6 +241,7 @@ object SemCheck {
         ZIO.fromOption(env.aggregationDef(ast.functionName))
           .mapError(_ => Error(s"No such aggregation function as '${ast.functionName.n}' found", Location(ast.pos)))
       }
+      // TODO: check parameters
       args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
     } yield Checked.AggregationCall(aggregationDef, args.toSeq)
   }

@@ -70,7 +70,7 @@ object RqlMessage {
   //}
 
   case class Success(columns: Seq[(String, rql.ValueType)]) extends RqlMessage
-  case class Error(error: String) extends RqlMessage
+  case class Error(errors: Seq[String]) extends RqlMessage
   case class Rows(rows: Seq[RqlService.ResultRow]) extends RqlMessage
   case object Finished extends RqlMessage
 }
