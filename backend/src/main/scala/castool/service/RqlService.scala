@@ -134,6 +134,7 @@ object RqlService {
 
   val builtins = new Functions()
     .addFunction(n"atob", Seq("b" -> rql.ValueType.Str), rql.Eval(atob))
+    .addAggregation(n"count", Seq(), rql.Num(0), rql.Eval(() => rql.Null), (_, num) => num)
 
   private class ServiceImpl(casSession: cassandra.CassandraSession.Service) extends Service {
     def compilationEnv: IO[Throwable, rql.Compiler.Env] = {

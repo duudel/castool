@@ -1,6 +1,7 @@
 package castool.rql
 
-import scala.reflect.ClassTag
+//import scala.reflect.ClassTag
+import TokenKind.TokenKind
 
 object Parser {
   case class Error(message: String, loc: Location) extends Serializable with Product
@@ -63,7 +64,7 @@ object Parser {
         if (st.isError) st.map(_.asInstanceOf[(A, B)]) else {
           p(st) match {
             case ok: St.Ok[_] => other(ok).map(b => (ok.result, b))
-            case nok: St.Nok => nok
+            case nok: St.Nok   => nok
             case err: St.Error => err
           }
         }
@@ -72,16 +73,9 @@ object Parser {
         p(st) match {
           case ok: St.Ok[_] =>
             other(ok).map(b => (ok.result, b)) match {
-              case nok: St.Nok =>
-                println("~! nok: " + nok)
-                St.Error(nok.input, nok.messages)
-              case err: St.Error =>
-                println("~! err: " + err)
-                err
-              case x: St.Ok[_] =>
-                println("~! ok input: " + x.input)
-                println("   ok result: " + x.result)
-                x
+              case nok: St.Nok   => St.Error(nok.input, nok.messages)
+              case err: St.Error => err
+              case ok: St.Ok[_]  => ok
             }
           case nok: St.Nok => nok
           case err: St.Error => err
@@ -124,29 +118,31 @@ object Parser {
       }
     }
 
-    def accept[T <: Token](implicit tc: ClassTag[T]): Parser[T] = {
-      val tclass = tc.runtimeClass
-      val tokenKind = tclass.getSimpleName()
+    def accept[T <: Token](kind: TokenKind[T]): Parser[T] = {
+      //val tclass = tc.runtimeClass
+      //val tokenKind = tclass.getSimpleName()
+      //val tokenKind = TokenKind.print[T]
 
       (st: St[Any]) => st match {
         case St.Ok(input, _) =>
           input.current.collect {
-            case t: Token if t.getClass() == tclass =>
+            //case t: Token if t.getClass() == tclass =>
+            case t: Token if t.kind == kind =>
               St.Ok(input.advance, t.asInstanceOf[T])
             case t =>
-              St.Nok(input, Seq(s"Expected $tokenKind, got '${t.display}'"))
-          }.getOrElse(St.Nok(input, Seq(s"Expected $tokenKind, but reached end of input")))
+              St.Nok(input, Seq(s"Expected '${kind.print}', got '${t.display}'"))
+          }.getOrElse(St.Nok(input, Seq(s"Expected '${kind.print}', but reached end of input")))
         case nok: St.Nok => nok.map(_.asInstanceOf[T])
         case err: St.Error => err.map(_.asInstanceOf[T])
       }
     }
 
     def acceptIdent(s: String): Parser[Token.Ident] = {
-      accept[Token.Ident].andThen(identSt => {
+      accept(TokenKind.ident).andThen(identSt => {
         identSt match {
           case St.Ok(_, result) if result.value == s =>
             identSt
-          case St.Ok(input, result) => St.Nok(input, Seq(s"Expected '$s', got ${result.value}"))
+          case St.Ok(input, result) => St.Nok(input, Seq(s"Expected '$s', but got ${result.value}"))
           case nok: St.Nok => St.Nok(nok.input, Seq(s"Expected '$s'"))
           case err: St.Error => St.Error(err.input, Seq(s"Expected '$s'"))
         }
@@ -154,7 +150,7 @@ object Parser {
     }
 
     def acceptName: Parser[NameAndToken] = {
-      accept[Token.Ident].andThen(identSt => {
+      accept(TokenKind.ident).andThen(identSt => {
         identSt match {
           case St.Ok(input, result) =>
             Name.fromString(result.value) match {
@@ -309,8 +305,8 @@ object Parser {
       }
     })
 
-    def logical_expr[OpTok <: Token.LogicalOp: ClassTag](subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
-      (subExpr ~ many(accept[OpTok] ~ subExpr)).map {
+    def logical_expr[OpTok <: Token.LogicalOp](opKind: TokenKind[OpTok])(subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
+      (subExpr ~ many(accept(opKind) ~ subExpr)).map {
         case (e0, Nil) =>
           e0
         case (left, (opToken, right) :: rest) =>
@@ -329,10 +325,10 @@ object Parser {
       }
 
     def arith2_expr[
-      T1 <: Token.ArithmeticOp: ClassTag,
-      T2 <: Token.ArithmeticOp: ClassTag
-    ](subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
-      (subExpr ~ many(any(accept[T1], accept[T2]) ~ subExpr)).map {
+      T1 <: Token.ArithmeticOp,
+      T2 <: Token.ArithmeticOp
+    ](opKind1: TokenKind[T1], opKind2: TokenKind[T2])(subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
+      (subExpr ~ many(any(accept(opKind1), accept(opKind2)) ~ subExpr)).map {
         case (e0, Nil) =>
           e0
         case (left, (opToken, right) :: rest) =>
@@ -351,10 +347,10 @@ object Parser {
       }
 
     def bin2_expr[
-      T1 <: Token.BinOpToken: ClassTag,
-      T2 <: Token.BinOpToken: ClassTag
-    ](subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
-      (subExpr ~ many(any(accept[T1], accept[T2]) ~! subExpr)).map {
+      T1 <: Token.BinOpToken: TokenKind,
+      T2 <: Token.BinOpToken: TokenKind
+    ](opKind1: TokenKind[T1], opKind2: TokenKind[T2])(subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
+      (subExpr ~ many(any(accept(opKind1), accept(opKind2)) ~! subExpr)).map {
         case (e0, Nil) =>
           e0
         case (left, (opToken, right) :: rest) =>
@@ -372,7 +368,7 @@ object Parser {
         case x => throw new MatchError("Invalid parsed expr " + x)
       }
 
-    def bin_expr[T <: Token.BinOpToken: ClassTag](subExpr: Parser[Ast.Expr], opParser: Parser[T]): Parser[Ast.Expr] =
+    def bin_expr[T <: Token.BinOpToken](subExpr: Parser[Ast.Expr], opParser: Parser[T]): Parser[Ast.Expr] =
       (subExpr ~ many(opParser ~! subExpr)).map {
         case (e0, Nil) =>
           e0
@@ -400,40 +396,40 @@ object Parser {
     lazy val null_lit_expr: Parser[Ast.NullLit] = acceptIdent("null").map(ident => Ast.NullLit(ident.pos))
     lazy val true_lit_expr: Parser[Ast.TrueLit] = acceptIdent("true").map(ident => Ast.TrueLit(ident.pos))
     lazy val false_lit_expr: Parser[Ast.FalseLit] = acceptIdent("false").map(ident => Ast.FalseLit(ident.pos))
-    lazy val number_lit_expr: Parser[Ast.NumberLit] = accept[Token.NumberLit].map(lit => Ast.NumberLit(lit))
-    lazy val string_lit_expr: Parser[Ast.StringLit] = accept[Token.StringLit].map(lit => Ast.StringLit(lit))
+    lazy val number_lit_expr: Parser[Ast.NumberLit] = accept(TokenKind.number).map(lit => Ast.NumberLit(lit))
+    lazy val string_lit_expr: Parser[Ast.StringLit] = accept(TokenKind.string).map(lit => Ast.StringLit(lit))
     lazy val funcCall_expr: Parser[Ast.FunctionCall] =
-      ((acceptName <~ accept[Token.LParen]) ~ (st => expr(st)).*(accept[Token.Comma]) <~ accept[Token.RParen]).map {
+      ((acceptName <~ accept(TokenKind.lparen)) ~ (st => expr(st)).*(accept(TokenKind.comma)) <~ accept(TokenKind.rparen)).map {
         case (nameAndTok, args) => Ast.FunctionCall(functionName = nameAndTok.name, args = args, pos = nameAndTok.tok.pos)
       }
-    lazy val parenth_expr: Parser[_ <: Ast.Expr] = (accept[Token.LParen] ~> (st => expr(st)) <~ accept[Token.RParen])
+    lazy val parenth_expr: Parser[_ <: Ast.Expr] = (accept(TokenKind.lparen) ~> (st => expr(st)) <~ accept(TokenKind.rparen))
     lazy val term_expr: Parser[_ <: Ast.Expr] = any(
       funcCall_expr, column_expr, null_lit_expr, true_lit_expr, false_lit_expr, number_lit_expr, string_lit_expr, parenth_expr
     )
-    lazy val unary_expr: Parser[_ <: Ast.Expr] = (any(accept[Token.OpNot], accept[Token.OpPlus], accept[Token.OpMinus]) ~ term_expr).map {
+    lazy val unary_expr: Parser[_ <: Ast.Expr] = (any(accept(TokenKind.not), accept(TokenKind.plus), accept(TokenKind.minus)) ~ term_expr).map {
       case (opToken, expr) => Ast.UnaryExpr(op = opToken.unaryOp, expr = expr, pos = opToken.pos)
     }
-    lazy val mult_expr: Parser[_ <: Ast.Expr] = arith2_expr[Token.OpMultiply, Token.OpDivide](any(unary_expr, term_expr))
-    lazy val sum_expr: Parser[_ <: Ast.Expr] = arith2_expr[Token.OpPlus, Token.OpMinus](mult_expr)
+    lazy val mult_expr: Parser[_ <: Ast.Expr] = arith2_expr(TokenKind.multiply, TokenKind.divide)(any(unary_expr, term_expr))
+    lazy val sum_expr: Parser[_ <: Ast.Expr] = arith2_expr(TokenKind.plus, TokenKind.minus)(mult_expr)
     lazy val comp_ltgt_expr: Parser[_ <: Ast.Expr] = bin_expr(sum_expr, any(
-      accept[Token.OpLess], accept[Token.OpLessEq], accept[Token.OpGreater], accept[Token.OpGreaterEq])
+      accept(TokenKind.less), accept(TokenKind.lessEq), accept(TokenKind.greater), accept(TokenKind.greaterEq))
     )
-    lazy val comp_expr: Parser[_ <: Ast.Expr] = bin_expr(comp_ltgt_expr, any(accept[Token.OpEqual], accept[Token.OpNotEqual]))
-    lazy val string_expr: Parser[_ <: Ast.Expr] = bin2_expr[Token.OpContains, Token.OpNotContains](comp_expr)
-    lazy val logical_and_expr: Parser[_ <: Ast.Expr] = logical_expr[Token.OpAnd](string_expr)
-    lazy val logical_or_expr: Parser[_ <: Ast.Expr] = logical_expr[Token.OpOr](logical_and_expr)
+    lazy val comp_expr: Parser[_ <: Ast.Expr] = bin_expr(comp_ltgt_expr, any(accept(TokenKind.eq), accept(TokenKind.notEq)))
+    lazy val string_expr: Parser[_ <: Ast.Expr] = bin2_expr(TokenKind.contains, TokenKind.notContains)(comp_expr)
+    lazy val logical_and_expr: Parser[_ <: Ast.Expr] = logical_expr(TokenKind.and)(string_expr)
+    lazy val logical_or_expr: Parser[_ <: Ast.Expr] = logical_expr(TokenKind.or)(logical_and_expr)
     lazy val expr: Parser[_ <: Ast.Expr] = logical_or_expr
 
     lazy val table: Parser[Ast.Table] = acceptName.map(nameAndTok => Ast.Table(name = nameAndTok.name, tok = nameAndTok.tok))
     lazy val where: Parser[Ast.Where] = (acceptIdent("where") ~! expr).map { case (w, expr) => Ast.Where(expr, w.pos) }
-    lazy val extend: Parser[Ast.Extend] = (acceptIdent("extend") ~! acceptName ~ (accept[Token.OpAssign] ~> expr)).map {
+    lazy val extend: Parser[Ast.Extend] = (acceptIdent("extend") ~! acceptName ~ (accept(TokenKind.assign) ~> expr)).map {
       case ((e, nameAndTok), expr) => Ast.Extend(name = nameAndTok, expr = expr, pos = e.pos)
     }
-    lazy val project: Parser[Ast.Project] = (acceptIdent("project") ~! acceptName.*(accept[Token.Comma])).map {
+    lazy val project: Parser[Ast.Project] = (acceptIdent("project") ~! acceptName.*(accept(TokenKind.comma))).map {
       case (p, names) => Ast.Project(names, p.pos)
     }
     lazy val orderBy: Parser[Ast.OrderBy] = ((acceptIdent("order") ~! acceptIdent("by"))
-      ~! acceptName.*(accept[Token.Comma])
+      ~! acceptName.*(accept(TokenKind.comma))
       ~? any(acceptIdent("asc"), acceptIdent("desc"))).map { case (((o, _), names), orderIdent) =>
         val order = orderIdent match {
           case Some(o) if o.value == "asc" => Order.Asc
@@ -443,17 +439,17 @@ object Parser {
         Ast.OrderBy(names, order, pos = o.pos)
       }
       lazy val summarize: Parser[Ast.Summarize] = (acceptIdent("summarize")
-        ~! (acceptName ~ (accept[Token.OpAssign] ~> funcCall_expr))
-            .+(accept[Token.Comma])
+        ~! (acceptName ~ (accept(TokenKind.assign) ~> funcCall_expr))
+            .+(accept(TokenKind.comma))
             .mapNok(nok => St.Nok(nok.input, Seq(s"summarize expects assignments of aggregation functions, but parsing failed with:") ++ nok.messages))
-        ~? (acceptIdent("by") ~ acceptName.*(accept[Token.Comma]))).map {
+        ~? (acceptIdent("by") ~ acceptName.*(accept(TokenKind.comma)))).map {
           case ((s, aggrs), groupByOpt) =>
             val aggregations = aggrs.map { case (nameAndTok, aggr) => Ast.Aggregation(nameAndTok, aggr) }
             val groupBy = groupByOpt.map(_._2).getOrElse(Seq.empty)
             Ast.Summarize(aggregations, groupBy, pos = s.pos)
         }
       lazy val toplevel: Parser[Ast.Source] = (table
-        ~? any[Ast.TopLevelOp](where, extend, project, orderBy, summarize).*(accept[Token.Bar], accept[Token.Bar])).map {
+        ~? any[Ast.TopLevelOp](where, extend, project, orderBy, summarize).*(accept(TokenKind.bar), accept(TokenKind.bar))).map {
           case (table, None) => table
           case (table, Some(ops)) => ops.foldLeft[Ast.Source](table) {
             case (acc, op) => Ast.Cont(acc, op)

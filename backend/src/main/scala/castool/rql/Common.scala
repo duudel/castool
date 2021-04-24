@@ -16,7 +16,7 @@ trait ValueTypeMapper[A <: Value] {
 
 object ResolveValueType {
   case class ValueTypeMapperImpl[A <: Value](valueType: ValueType) extends ValueTypeMapper[A]
-  implicit val imp_null: ValueTypeMapper[Null] = ValueTypeMapperImpl[Null](ValueType.Null)
+  implicit val imp_null: ValueTypeMapper[Null.type] = ValueTypeMapperImpl[Null.type](ValueType.Null)
   implicit val imp_num: ValueTypeMapper[Num] = ValueTypeMapperImpl[Num](ValueType.Num)
   implicit val imp_str: ValueTypeMapper[Str] = ValueTypeMapperImpl[Str](ValueType.Str)
   implicit val imp_bool: ValueTypeMapper[Bool] = ValueTypeMapperImpl[Bool](ValueType.Bool)

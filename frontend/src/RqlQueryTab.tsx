@@ -245,8 +245,7 @@ function RqlQueryTab(props: RqlQueryTabProps) {
       </TopSection>
       {state.queryErrors && (
         <div>
-        {state.queryErrors.map((error, line) => <div key={"error-line" + line}>{error}</div>)
-        }
+        {state.queryErrors.map((error, line) => <ErrorLine key={"error-line" + line}>{error}</ErrorLine>)}
         </div>
       )}
       {state.queryResult && (
@@ -323,6 +322,10 @@ const PageLink = styled.button<{ selected: boolean }>`
   ${({ selected }) =>
     selected ? "text-decoration: none; font-size: 14pt; border: 2px solid #bbb" : "text-decoration: underline;"
   };
+`;
+
+const ErrorLine = styled.pre`
+  font-family: Courier;
 `;
 
 const Table = styled.table``;

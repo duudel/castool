@@ -62,14 +62,27 @@ class CasService[R <: CasService.AppEnv] { //[F[_]: Effect: ContextShift] extend
         }
         queryResult.catchAll {
           serviceErrors: Seq[RqlService.Error] =>
-            val errors = serviceErrors.map { error =>
+            val errors = serviceErrors.flatMap { error =>
               error.loc match {
                 case Some(loc) =>
                   val line = loc.line
                   val column = loc.column
-                  s"$line:$column: " + error.msg
+                  import scala.jdk.CollectionConverters._
+                  val (lineString, _) = query.foldLeft(("", line)) {
+                    case ((result, lines), c) if c == '\n' =>
+                      (result, lines - 1)
+                    case ((result, lines), c) if lines == 1 =>
+                      (result + c, lines)
+                    case (acc, lines) => acc
+                  }
+                  val pointerString = "-".*(column) + "^"
+                  Seq(
+                    s"$line:$column: " + error.msg,
+                    lineString,
+                    pointerString
+                  )
                 case None =>
-                  error.msg
+                  Seq(error.msg)
               }
             }
             val errorMessage = RqlMessage.Error(errors)
