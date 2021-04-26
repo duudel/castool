@@ -4,9 +4,10 @@ import scala.collection.SeqMap
 
 object ValueType extends Enumeration {
   val Null: Value = Value
-  val Num: Value = Value
-  val Str: Value = Value
   val Bool: Value = Value
+  val Num: Value = Value
+  val Date: Value = Value
+  val Str: Value = Value
   val Obj: Value = Value
 }
 
@@ -17,21 +18,36 @@ trait ValueTypeMapper[A <: Value] {
 object ResolveValueType {
   case class ValueTypeMapperImpl[A <: Value](valueType: ValueType) extends ValueTypeMapper[A]
   implicit val imp_null: ValueTypeMapper[Null.type] = ValueTypeMapperImpl[Null.type](ValueType.Null)
-  implicit val imp_num: ValueTypeMapper[Num] = ValueTypeMapperImpl[Num](ValueType.Num)
-  implicit val imp_str: ValueTypeMapper[Str] = ValueTypeMapperImpl[Str](ValueType.Str)
   implicit val imp_bool: ValueTypeMapper[Bool] = ValueTypeMapperImpl[Bool](ValueType.Bool)
+  implicit val imp_num: ValueTypeMapper[Num] = ValueTypeMapperImpl[Num](ValueType.Num)
+  implicit val imp_date: ValueTypeMapper[Date] = ValueTypeMapperImpl[Date](ValueType.Date)
+  implicit val imp_str: ValueTypeMapper[Str] = ValueTypeMapperImpl[Str](ValueType.Str)
   implicit val imp_obj: ValueTypeMapper[Obj] = ValueTypeMapperImpl[Obj](ValueType.Obj)
 
   implicit def valueType[A <: Value](implicit m: ValueTypeMapper[A]): ValueType = m.valueType
 }
 
-sealed trait Value
+sealed trait Value extends Serializable with Product
 
 final case object Null extends Value
-final case class Num(v: Double) extends Value
-final case class Str(v: String) extends Value
 final case class Bool(v: Boolean) extends Value
+final case class Num(v: Double) extends Value
+final case class Date(v: java.time.Instant) extends Value
+final case class Str(v: String) extends Value
 final case class Obj(v: Map[String, Value]) extends Value
+
+object Date {
+  def fromString(s: String): scala.util.Try[Date] = {
+    scala.util.Try {
+      java.time.Instant.parse(s)
+    }.orElse(scala.util.Try {
+      java.time.LocalDate.parse(s)
+        .atStartOfDay()
+        .atOffset(java.time.ZoneOffset.UTC)
+        .toInstant()
+    }).map(instant => Date(instant))
+  }
+}
 
 case class Name private (n: String) extends AnyVal
 object Name {

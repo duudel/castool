@@ -11,19 +11,19 @@ sealed trait Token extends Serializable with Product {
 object Token {
   sealed abstract class Tok(val kind: TokenKind[_]) extends Token { def display: String = kind.print }
   // identifiers
-  final case class Ident(value: String, pos: Int) extends Tok(TokenKind.ident) //(value)
+  final case class Ident(value: String, pos: Int) extends Tok(TokenKind.ident)
   // literals
-  final case class StringLit(value: String, pos: Int) extends Tok(TokenKind.string) //("\"" + value + "\"")
-  final case class NumberLit(value: Double, pos: Int) extends Tok(TokenKind.number)//(s"$value") // TODO: support integer and float numbers
-  final case class DateLit(value: String, pos: Int) extends Tok(TokenKind.date)//(value)
-  final case class NullLit(pos: Int) extends Tok(TokenKind.nullKind) //("null")
-  final case class TrueLit(pos: Int) extends Tok(TokenKind.trueKind) //("true")
-  final case class FalseLit(pos: Int) extends Tok(TokenKind.falseKind) //("false")
+  final case class StringLit(value: String, pos: Int) extends Tok(TokenKind.string)
+  final case class NumberLit(value: Double, pos: Int) extends Tok(TokenKind.number) // TODO: support integer and float numbers
+  final case class DateLit(value: Date, pos: Int) extends Tok(TokenKind.date)
+  final case class NullLit(pos: Int) extends Tok(TokenKind.nullKind)
+  final case class TrueLit(pos: Int) extends Tok(TokenKind.trueKind)
+  final case class FalseLit(pos: Int) extends Tok(TokenKind.falseKind)
   // special
-  final case class Bar(pos: Int) extends Tok(TokenKind.bar) //("|")
-  final case class LParen(pos: Int) extends Tok(TokenKind.lparen) //("(")
-  final case class RParen(pos: Int) extends Tok(TokenKind.rparen) //(")")
-  final case class Comma(pos: Int) extends Tok(TokenKind.comma) //(",")
+  final case class Bar(pos: Int) extends Tok(TokenKind.bar)
+  final case class LParen(pos: Int) extends Tok(TokenKind.lparen)
+  final case class RParen(pos: Int) extends Tok(TokenKind.rparen)
+  final case class Comma(pos: Int) extends Tok(TokenKind.comma)
 
   // operators
   sealed trait UnaryOpToken extends Token { def unaryOp: UnaryOp }

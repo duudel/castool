@@ -99,13 +99,6 @@ object RqlService {
     rql.SourceDef(sourceDef)
   }
 
-  val b64decoder = java.util.Base64.getDecoder()
-
-  val atob = (blob: rql.Str) => {
-    val bytes = b64decoder.decode(blob.v)
-    rql.Str(new String(bytes))
-  }
-
   class Functions {
     private val functions: scala.collection.mutable.Map[String, rql.FunctionDef[_ <: rql.Value]] = scala.collection.mutable.Map.empty
     private val aggregations: scala.collection.mutable.Map[String, rql.AggregationDef[_ <: rql.Value]] = scala.collection.mutable.Map.empty
@@ -129,11 +122,32 @@ object RqlService {
     }
   }
 
+  val b64decoder = java.util.Base64.getDecoder()
+
+  val atob = (blob: rql.Str) => {
+    val bytes = b64decoder.decode(blob.v)
+    rql.Str(new String(bytes))
+  }
+
+  val uuid_to_date = (v: rql.Str) => {
+    val NUM_100NS_INTERVALS_SINCE_UUID_EPOCH_UNTIL_INSTANT_EPOCH = 0x01b21dd213814000L
+    try {
+      val uuid = java.util.UUID.fromString(v.v)
+      val ts = uuid.timestamp()
+      val millisAfterInstantEpoch = (ts - NUM_100NS_INTERVALS_SINCE_UUID_EPOCH_UNTIL_INSTANT_EPOCH) / 10000
+      val instant = java.time.Instant.ofEpochMilli(millisAfterInstantEpoch)
+      rql.Date(instant)
+    } catch {
+      case ex: Throwable => rql.Null.asInstanceOf[Nothing]
+    }
+  }
+
   import rql.ResolveValueType._
   import rql.Name.NameInterpolator
 
   val builtins = new Functions()
     .addFunction(n"atob", Seq("b" -> rql.ValueType.Str), rql.Eval(atob))
+    .addFunction(n"uuid_to_date", Seq("uuid_str" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
     .addAggregation(n"count", Seq(), rql.Num(0), rql.Eval(() => rql.Null), (_, num) => num)
 
   private class ServiceImpl(casSession: cassandra.CassandraSession.Service) extends Service {

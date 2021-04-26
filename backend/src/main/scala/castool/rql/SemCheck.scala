@@ -32,7 +32,7 @@ object Checked {
   final case object FalseLit extends Expr[Bool] { def resultType: ValueType = ValueType.Bool }
   final case class StringLit(value: String) extends Expr[Str] { def resultType: ValueType = ValueType.Str }
   final case class NumberLit(value: Double) extends Expr[Num] { def resultType: ValueType = ValueType.Num }
-  //final case class DateLit(value: Token.DateLit) extends Expr[A]
+  final case class DateLit(value: Date) extends Expr[Date] { def resultType: ValueType = ValueType.Date }
 
   final case class UnaryExpr[A <: Value](op: UnaryOp, expr: Expr[A]) extends Expr[A] {
     def resultType: ValueType = expr.resultType
@@ -156,7 +156,7 @@ object SemCheck {
       case Ast.FalseLit(pos)    => ZIO.succeed(Checked.FalseLit)
       case Ast.StringLit(value) => ZIO.succeed(Checked.StringLit(value.value))
       case Ast.NumberLit(value) => ZIO.succeed(Checked.NumberLit(value.value))
-      //case DateLit(value: Token.DateLit)
+      case Ast.DateLit(value)   => ZIO.succeed(Checked.DateLit(value.value))
 
       case Ast.UnaryExpr(op, expr, pos) =>
         for {

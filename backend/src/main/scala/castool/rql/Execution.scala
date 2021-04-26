@@ -116,6 +116,7 @@ object Execution {
             case (Bool(true), Bool(false)) => 1
             case (Bool(false), Bool(false)) => 0
             case (Num(x), Num(y)) => if (x == y) 0 else if (x < y) -1 else 1
+            case (Date(x), Date(y)) => if (x == y) 0 else if (x.isBefore(y)) -1 else 1
             case (Str(x), Str(y)) => x.compare(y)
             case (Obj(x), Obj(y)) => -1 // TODO: figure out how to compare or treat as an error in sem check
             case x => throw new MatchError(x)

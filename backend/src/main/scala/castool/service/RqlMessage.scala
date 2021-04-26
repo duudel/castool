@@ -20,6 +20,7 @@ object RqlMessage {
     case rql.Bool(v) if v => Json.True
     case rql.Bool(v) => Json.False
     case rql.Num(v) => Json.fromDoubleOrNull(v)
+    case rql.Date(v) => Json.fromString(v.toString)
     case rql.Str(v) => Json.fromString(v)
     case rql.Obj(v) => rql.Obj(v).asJson
   }

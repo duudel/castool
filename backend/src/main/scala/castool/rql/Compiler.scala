@@ -112,6 +112,8 @@ object Compiler {
         ZIO.succeed((input: InputRow) => Bool(expr == Checked.TrueLit).asInstanceOf[A])
       case Checked.NumberLit(value) =>
         ZIO.succeed((input: InputRow) => Num(value).asInstanceOf[A])
+      case Checked.DateLit(value) =>
+        ZIO.succeed((input: InputRow) => value.asInstanceOf[A])
       case Checked.StringLit(value) =>
         ZIO.succeed((input: InputRow) => Str(value).asInstanceOf[A])
       case Checked.UnaryExpr(op, expr) =>
@@ -193,6 +195,7 @@ object Compiler {
               val vb = compiledB.eval(input)
               (va, vb) match {
                 case (Num(a), Num(b)) => Bool(a < b).asInstanceOf[A]
+                case (Date(a), Date(b)) => Bool(a.isBefore(b)).asInstanceOf[A]
                 case (Str(a), Str(b)) => Bool(a < b).asInstanceOf[A]
                 case (a, b) => throw new MatchError((a, op, b))
               }
@@ -203,6 +206,7 @@ object Compiler {
               val vb = compiledB.eval(input)
               (va, vb) match {
                 case (Num(a), Num(b)) => Bool(a <= b).asInstanceOf[A]
+                case (Date(a), Date(b)) => Bool(!b.isBefore(a)).asInstanceOf[A]
                 case (Str(a), Str(b)) => Bool(a <= b).asInstanceOf[A]
                 case (a, b) => throw new MatchError((a, op, b))
               }
@@ -213,6 +217,7 @@ object Compiler {
               val vb = compiledB.eval(input)
               (va, vb) match {
                 case (Num(a), Num(b)) => Bool(a > b).asInstanceOf[A]
+                case (Date(a), Date(b)) => Bool(a.isAfter(b)).asInstanceOf[A]
                 case (Str(a), Str(b)) => Bool(a > b).asInstanceOf[A]
                 case (a, b) => throw new MatchError((a, op, b))
               }
@@ -223,6 +228,7 @@ object Compiler {
               val vb = compiledB.eval(input)
               (va, vb) match {
                 case (Num(a), Num(b)) => Bool(a >= b).asInstanceOf[A]
+                case (Date(a), Date(b)) => Bool(!b.isAfter(a)).asInstanceOf[A]
                 case (Str(a), Str(b)) => Bool(a >= b).asInstanceOf[A]
                 case (a, b) => throw new MatchError((a, op, b))
               }

@@ -29,7 +29,7 @@ object Ast {
   final case class FalseLit(pos: Int) extends Expr
   final case class StringLit(value: Token.StringLit) extends Expr { def pos: Int = value.pos }
   final case class NumberLit(value: Token.NumberLit) extends Expr { def pos: Int = value.pos }
-  //final case class DateLit(value: Token.DateLit, pos: Int) extends Expr
+  final case class DateLit(value: Token.DateLit) extends Expr { def pos: Int = value.pos }
 
   final case class UnaryExpr(op: UnaryOp, expr: Expr, pos: Int) extends Expr
   final case class BinaryExpr(op: BinaryOp, exprA: Expr, exprB: Expr, pos: Int) extends Expr

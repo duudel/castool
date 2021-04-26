@@ -403,6 +403,7 @@ object Parser {
     lazy val true_lit_expr: Parser[Ast.TrueLit] = accept(TokenKind.trueKind).map(lit => Ast.TrueLit(lit.pos))
     lazy val false_lit_expr: Parser[Ast.FalseLit] = accept(TokenKind.falseKind).map(lit => Ast.FalseLit(lit.pos))
     lazy val number_lit_expr: Parser[Ast.NumberLit] = accept(TokenKind.number).map(lit => Ast.NumberLit(lit))
+    lazy val date_lit_expr: Parser[Ast.DateLit] = accept(TokenKind.date).map(lit => Ast.DateLit(lit))
     lazy val string_lit_expr: Parser[Ast.StringLit] = accept(TokenKind.string).map(lit => Ast.StringLit(lit))
     lazy val funcCall_expr: Parser[Ast.FunctionCall] =
       ((acceptName <~ accept(TokenKind.lparen)) ~ Parser((st: St[Any]) => expr(st)).*(accept(TokenKind.comma)) <~ accept(TokenKind.rparen)).map {
@@ -410,7 +411,7 @@ object Parser {
       }
     lazy val parenth_expr: Parser[_ <: Ast.Expr] = (accept(TokenKind.lparen) ~> Parser((st: St[Any]) => expr(st)) <~ accept(TokenKind.rparen))
     lazy val term_expr: Parser[_ <: Ast.Expr] = any(
-      funcCall_expr, column_expr, null_lit_expr, true_lit_expr, false_lit_expr, number_lit_expr, string_lit_expr, parenth_expr
+      funcCall_expr, column_expr, null_lit_expr, true_lit_expr, false_lit_expr, number_lit_expr, string_lit_expr, date_lit_expr, parenth_expr
     )
     lazy val unary_expr: Parser[_ <: Ast.Expr] = (any(accept(TokenKind.not), accept(TokenKind.minus), accept(TokenKind.plus)) ~! term_expr).map {
       case (opToken, expr) => Ast.UnaryExpr(op = opToken.unaryOp, expr = expr, pos = opToken.pos)

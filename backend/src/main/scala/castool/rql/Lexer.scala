@@ -228,6 +228,14 @@ object Lexer {
 
   val numberLit = number_.!((s: String, pos: Int) => NumberLit(s.toDouble, pos))
 
+  val date_ = digit(4) :> '-' :> digit(2) :> '-' :> digit(2)
+  val timezoneOffset_ = (char('+') :| '-') :> digit(4)
+  val time_ = char('T') :> digit(2) :> ':' :> digit(2) :> ':' :> digit(2) :> (char('Z') :| timezoneOffset_ :| Nop)
+  val datetime_ = date_ :> (time_ :| Nop)
+  val dateLit = datetime_.!!((s, pos) =>
+      Date.fromString(s).map { d => DateLit(d, pos) }
+  )
+
   val stringEscapeSeq = char('\\') :> any('r', 'n', 't', '"', '\'', '\\')
   val stringLitDq = char('"') :> (anyBut('\\', '"') :| stringEscapeSeq).* :> char('"')
   val stringLitSq = char('\'') :> (anyBut('\\', '\'') :| stringEscapeSeq).* :> char('\'')
@@ -273,7 +281,7 @@ object Lexer {
 
   val tokens = choice(
     singleLineComment, multiLineComment, skipWhitespace, op,
-    nullLit, trueLit, falseLit, ident, numberLit, stringLit,
+    nullLit, trueLit, falseLit, ident, dateLit, numberLit, stringLit,
     bar, lparen, rparen, comma,
   ).*
 
