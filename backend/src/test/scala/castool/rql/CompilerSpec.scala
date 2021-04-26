@@ -27,25 +27,20 @@ object CompilerSpec {
       n"count" -> AggregationDef(
         evaluate = Eval((acc: Null.type) => Null),
         returnType = ValueType.Num,
-        parameters = Map.empty,
+        parameters = Seq.empty,
         initialValue = Null,
         finalPhase = (acc, n) => n
       )
     )
     new Compiler.Env {
-      def tableDef(name: Name): SemCheck.Result[SourceDef] = {
-        if (name == n"TestTable")
-          zio.ZIO.succeed(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
-        else zio.ZIO.fail(SemCheck.Error(s"No such table as '${name.n}'", Location(0)))
+      def tableDef(name: Name): Option[SourceDef] = {
+        if (name == n"TestTable") Some(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
+        else None
       }
-      def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] =
-        if (name == n"not")
-          zio.ZIO.succeed(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Map("b" -> ValueType.Bool), ValueType.Bool))
-        else zio.ZIO.fail(SemCheck.Error(s"No such function as '${name.n}'", Location(0)))
-      def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] =
-        zio.ZIO
-          .fromOption(aggregations.get(name))
-          .mapError(_ => SemCheck.Error(s"No such aggregation as '${name.n}'", Location(0)))
+      def functionDef(name: Name): Option[FunctionDef[Value]] =
+        if (name == n"not") Some(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Seq("b" -> ValueType.Bool), ValueType.Bool))
+        else None
+      def aggregationDef(name: Name): Option[AggregationDef[Value]] = aggregations.get(name)
     }
   }
 
@@ -53,7 +48,7 @@ object CompilerSpec {
   val execEnvLayer: ZLayer[Any, Any, Execution.EnvService] = Execution.live(testEnv)
   val layer0: ZLayer[Any, Any, ExecLayer] = zio.console.Console.live ++ execEnvLayer
 
-  def testCompilation(s: String): IO[Compiler.Error, Compiled.Source] = {
+  def testCompilation(s: String): IO[Compiler.Errors, Compiled.Source] = {
     val result = Compiler.compileQuery(s)
     result.provide(testCompilationEnv)
   }

@@ -13,14 +13,9 @@ object SemCheckSpec {
   )
 
   val env = new SemCheck.Env {
-    def tableDef(name: Name): SemCheck.Result[SourceDef] = {
-      zio.ZIO.fromOption(tables.get(name))
-        .mapError(_ => SemCheck.Error(s"No such table as ${name.n}", Location(0)))
-    }
-    def functionDef(name: Name): SemCheck.Result[FunctionDef[Value]] =
-      zio.ZIO.fail(SemCheck.Error(s"No such function as '${name.n}'", Location(0)))
-    def aggregationDef(name: Name): SemCheck.Result[AggregationDef[Value]] =
-      zio.ZIO.fail(SemCheck.Error(s"No such aggregation function as '${name.n}'", Location(0)))
+    def tableDef(name: Name): Option[SourceDef] = tables.get(name)
+    def functionDef(name: Name): Option[FunctionDef[Value]] = None
+    def aggregationDef(name: Name): Option[AggregationDef[Value]] = None
   }
 
   def semCheckTest(s: String): zio.IO[SemCheck.Error, Checked] = {
@@ -29,8 +24,8 @@ object SemCheckSpec {
         Parser.parse(tokens) match {
           case Parser.Success(ast) =>
             SemCheck.check(ast)
-          case Parser.Failure(error, loc) =>
-            zio.ZIO.fail(SemCheck.Error(error, loc))
+          case Parser.Failure(errors) =>
+            zio.ZIO.fail(SemCheck.Error(errors.head.message, errors.head.loc))
         }
       case Lexer.Failure(error, loc) =>
         zio.ZIO.fail(SemCheck.Error(error, loc))

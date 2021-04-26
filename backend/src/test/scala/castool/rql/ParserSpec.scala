@@ -2,6 +2,7 @@ package castool.rql
 
 //import zio._
 import zio.test._
+import zio.test.TestAspect._
 import zio.test.Assertion._
 import zio.test.environment._
 
@@ -15,11 +16,12 @@ object ParserSpec {
         parse(tokens) match {
           case Success(ast) =>
             testImpl(ast)
-          case Failure(error, _) =>
-            assert(error)(equalTo(""))
+          case Failure(errors) =>
+            assert(errors)(isEmpty)
         }
-      case Lexer.Failure(error, _) =>
-        assert(error)(equalTo(""))
+      case Lexer.Failure(error, loc) =>
+        val pos = loc.atSourceText(s)
+        assert(pos + ": " + error)(isEmptyString)
     }
   }
 
@@ -29,7 +31,7 @@ object ParserSpec {
         val tab = Ast.Table(n"TableName", Token.Ident("TableName", 0))
         assert(result)(equalTo(tab))
       }
-    },
+    } @@ ignore,
     test("parse simple query") {
       parseTest("TableName | where column1") { result =>
         val tab = Ast.Table(n"TableName", Token.Ident("TableName", 0))
