@@ -25,9 +25,9 @@ object Lexer {
     override def hasInput: Boolean = input.hasInput()
     def advance(): Valid = copy(input = input.advance())
     def emit(token: Token): Valid = copy(tokens = tokens :+ token)
-    def reject: Reject = Reject(this)
+    def reject(message: String): Reject = Reject(this, message)
   }
-  final case class Reject(prev: Valid) extends State {
+  final case class Reject(prev: Valid, message: String) extends State {
     override def isValid: Boolean = false
     override def hasInput: Boolean = false
   }
@@ -41,8 +41,10 @@ object Lexer {
     def :|(c: Char): Or = Or(this, AcceptChar(c))
     def :|(s: String): Or = Or(this, AcceptString(s))
     def *(): Consumer = RepeatWhile(this)
+    def apply(n: Int): Consumer = Times(this, n)
     def ![T <: Token](fn: (String, Int) => T): Consumer = Emit(this, fn)
     def ![T <: Token](fn: Int => T): Consumer = Emit(this, (_, pos) => fn(pos))
+    def !![T <: Token](map: (String, Int) => scala.util.Try[T]) = EmitMap(this, map)
   }
 
   case class And(a: Consumer, b: Consumer) extends Consumer {
@@ -63,7 +65,7 @@ object Lexer {
     def accept(state: Valid): State = if (state.input.accept(c)) {
       state.advance()
     } else {
-      state.reject
+      state.reject(s"Expected '$c'")
     }
   }
 
@@ -76,7 +78,7 @@ object Lexer {
           return state.advance()
         }
       }
-      state.reject
+      state.reject(s"Expected any of ${c.map(x => s"'$x'").mkString(", ")}")
     }
   }
 
@@ -86,11 +88,10 @@ object Lexer {
 
   case class AcceptAnyBut(c: Iterable[Char]) extends Consumer {
     def accept(state: Valid): State = {
-      //println("Accept any " + c)
       var it = c.iterator
       while (it.hasNext) {
         if (state.input.accept(it.next())) {
-          return state.reject
+          return state.reject(s"Expected other than ${c.map(x => s"'$x'").mkString(", ")}")
         }
       }
       state.advance()
@@ -112,7 +113,7 @@ object Lexer {
       if (index == str.length()) {
         s
       } else {
-        s.reject
+        s.reject(s"Expected '$str'")
       }
     }
   }
@@ -120,7 +121,7 @@ object Lexer {
   case class Not(c: Consumer) extends Consumer {
     def accept(state: Valid): State = c.accept(state) match {
       case r: Reject => state
-      case s: Valid => s.reject
+      case s: Valid => s.reject(s"Expected other than '${s.tokens.last}'") // TODO: expects that there is at least one token
     }
   }
 
@@ -128,46 +129,72 @@ object Lexer {
     def accept(state: Valid): State = state
   }
 
-  case class Invert(c: Consumer) extends Consumer {
-    def accept(state: Valid): State = c.accept(state) match {
-      case r: Reject => state.advance()
-      case s: Valid => s.reject
+  case class Emit[T <: Token](c: Consumer, tokenFn: (String, Int) => T) extends Consumer {
+    def accept(state: Valid): State = {
+      c.accept(state) match {
+        case v: Valid =>
+          val startPos = state.input.pos
+          val value = v.input.substringFrom(startPos)
+          v.emit(tokenFn(value, startPos))
+        case _ =>
+          state.reject("Unexpected token")
+      }
     }
   }
 
-  case class Emit[T <: Token](c: Consumer, tokenFn: (String, Int) => T) extends Consumer {
+  case class EmitMap[T <: Token](c: Consumer, tokenMap: (String, Int) => scala.util.Try[T]) extends Consumer {
     def accept(state: Valid): State = {
       val next = c.accept(state)
       next match {
         case v: Valid =>
           val startPos = state.input.pos
           val value = v.input.substringFrom(startPos)
-          v.emit(tokenFn(value, startPos))
+          tokenMap(value, startPos) match {
+            case scala.util.Success(token) => v.emit(token)
+            case scala.util.Failure(ex) => state.reject(s"${ex.getMessage()}")
+          }
         case _ =>
-          state.reject
+          state.reject("Unexpected token")
       }
     }
   }
 
   case class RepeatWhile(c: Consumer) extends Consumer {
     def accept(state: Valid): State = {
-      //if (state.input.hasInput()) {
-        var s = c.accept(state)
-        if (s.isValid) {
-          var lastValid = s
-          while (s.isValid && s.hasInput) {
-            s = c.accept(s.asInstanceOf[Valid])
-            if (s.isValid) {
-              lastValid = s
-            }
+      var s = c.accept(state)
+      if (s.isValid) {
+        var lastValid = s
+        while (s.isValid && s.hasInput) {
+          s = c.accept(s.asInstanceOf[Valid])
+          if (s.isValid) {
+            lastValid = s
           }
-          lastValid
-        } else {
-          s
         }
-      //} else {
-      //  state.reject
-      //}
+        lastValid
+      } else {
+        s
+      }
+    }
+  }
+
+
+  case class Times(c: Consumer, N: Int) extends Consumer {
+    def accept(state: Valid): State = {
+      var s = c.accept(state)
+      if (s.isValid) {
+        var n = 1
+        var lastValid = s
+        while (s.isValid && s.hasInput && n < N) {
+          s = c.accept(s.asInstanceOf[Valid])
+          if (s.isValid) {
+            lastValid = s
+            n += 1
+          }
+        }
+        if (n == N) lastValid else state.reject("Not enough repetitions")
+      } else {
+        s
+      }
     }
   }
 
@@ -191,7 +218,7 @@ object Lexer {
   val number_ = digit.* :> (decimals :| Nop) :> (exponent :| Nop)
   val alpha = AcceptAny('a' to 'z') :| AcceptAny('A' to 'Z')
   val alphaNumeric = alpha :| digit
-  val ident_ = alpha :> (alphaNumeric :| '_').*
+  val ident_ = alpha :> ((alphaNumeric :| '_').* :| Nop)
   def keyword(k: String) = str(k) :> Not(ident_)
 
   val singleLineComment = str("//") :> anyBut('\n').*
@@ -246,7 +273,8 @@ object Lexer {
 
   val tokens = choice(
     singleLineComment, multiLineComment, skipWhitespace, op,
-    ident, numberLit, stringLit, bar, lparen, rparen, comma,
+    nullLit, trueLit, falseLit, ident, numberLit, stringLit,
+    bar, lparen, rparen, comma,
   ).*
 
   sealed trait Result
@@ -258,24 +286,16 @@ object Lexer {
   def lex(input: String): Result = {
     val state: Valid = valid(input)
     lexState(state) match {
-      case Valid(input, tokens) if !input.hasInput => Success(tokens)
-      case Valid(input, tokens) => Failure("Invalid token", Location(input.pos))
-      case Reject(prev) => Failure("Invalid token", Location(prev.input.pos))
+      case Valid(input, tokens) if !input.hasInput =>
+        Success(tokens)
+      case Valid(input, tokens) =>
+        Failure(s"Invalid token '${input.current()}'", Location(input.pos))
+      case Reject(prev, message) => Failure(s"Lexing error: $message", Location(prev.input.pos))
     }
   }
 
   def lexState(state: Valid): State = {
     tokens.accept(state)
-  }
-
-  def main() {
-    lex("""
-      Rows | where persistence_id < 20 and kala <= 12 or ser_is !contains "Event"
-      | extend json=parse_json(event) == "<parsed>" // here we are parsing it!
-      | /* order by persistence_id */
-      """)
-
-    println(numberLit.accept(valid("20.201211e+2")))
   }
 
 }

@@ -3,7 +3,7 @@ package castool.rql
 sealed trait Ast extends Serializable with Product {
   def pos: Int
 }
-  
+
 case class NameAndToken(name: Name, tok: Token.Ident)
 
 object Ast {
