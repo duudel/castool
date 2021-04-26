@@ -78,6 +78,19 @@ object Parser {
 
   object P {
     implicit class Pops[A](p: Parser[A]) {
+      @inline def trace(name: String): Parser[A] = p /* Parser { st: St[Any] =>
+        p(st) match {
+          case ok: St.Ok[A] =>
+            println(s"$name: ok ${ok.result}")
+            ok
+          case nok: St.Nok =>
+            println(s"$name: nok ${nok.messages} - ${nok.parserName}")
+            nok
+          case err: St.Error =>
+            println(s"$name: error ${err.nok.messages} - ${err.nok.parserName}")
+            err
+        }
+      }*/
       @inline def fail(msg: String): Parser[Nothing] = Parser { st: St[Any] =>
         p(st) match {
           case ok: St.Ok[A] => St.nok(st.input, msg, p.name).toError
@@ -288,7 +301,7 @@ object Parser {
           case ok @ St.Ok(_, item) =>
             separator(ok) match {
               case sepOk: St.Ok[_] => step(sepOk, results :+ item)
-              case nok: St.Nok     => ok.map(_ => results)
+              case nok: St.Nok     => ok.map(_ => results :+ item)
               case err: St.Error   => err
             }
           case nok: St.Nok   => nok
@@ -299,7 +312,7 @@ object Parser {
     } }
 
     def logical_expr[OpTok <: Token.LogicalOp](opKind: TokenKind[OpTok])(subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
-      (subExpr ~ many(accept(opKind) ~ subExpr)).map {
+      (subExpr ~ many(accept(opKind) ~! subExpr)).map {
         case (e0, Nil) =>
           e0
         case (left, (opToken, right) :: rest) =>
@@ -321,7 +334,7 @@ object Parser {
       T1 <: Token.ArithmeticOp,
       T2 <: Token.ArithmeticOp
     ](opKind1: TokenKind[T1], opKind2: TokenKind[T2])(subExpr: Parser[Ast.Expr]): Parser[Ast.Expr] =
-      (subExpr ~ many(any(accept(opKind1), accept(opKind2)) ~ subExpr)).map {
+      (subExpr ~ many(any(accept(opKind1), accept(opKind2)) ~! subExpr)).map {
         case (e0, Nil) =>
           e0
         case (left, (opToken, right) :: rest) =>
@@ -386,9 +399,9 @@ object Parser {
     import P._
 
     lazy val column_expr: Parser[Ast.Column] = acceptName.map(nameAndTok => Ast.Column(nameAndTok.name, nameAndTok.tok.pos))
-    lazy val null_lit_expr: Parser[Ast.NullLit] = acceptIdent("null").map(ident => Ast.NullLit(ident.pos))
-    lazy val true_lit_expr: Parser[Ast.TrueLit] = acceptIdent("true").map(ident => Ast.TrueLit(ident.pos))
-    lazy val false_lit_expr: Parser[Ast.FalseLit] = acceptIdent("false").map(ident => Ast.FalseLit(ident.pos))
+    lazy val null_lit_expr: Parser[Ast.NullLit] = accept(TokenKind.nullKind).map(lit => Ast.NullLit(lit.pos))
+    lazy val true_lit_expr: Parser[Ast.TrueLit] = accept(TokenKind.trueKind).map(lit => Ast.TrueLit(lit.pos))
+    lazy val false_lit_expr: Parser[Ast.FalseLit] = accept(TokenKind.falseKind).map(lit => Ast.FalseLit(lit.pos))
     lazy val number_lit_expr: Parser[Ast.NumberLit] = accept(TokenKind.number).map(lit => Ast.NumberLit(lit))
     lazy val string_lit_expr: Parser[Ast.StringLit] = accept(TokenKind.string).map(lit => Ast.StringLit(lit))
     lazy val funcCall_expr: Parser[Ast.FunctionCall] =
@@ -399,7 +412,7 @@ object Parser {
     lazy val term_expr: Parser[_ <: Ast.Expr] = any(
       funcCall_expr, column_expr, null_lit_expr, true_lit_expr, false_lit_expr, number_lit_expr, string_lit_expr, parenth_expr
     )
-    lazy val unary_expr: Parser[_ <: Ast.Expr] = (any(accept(TokenKind.not), accept(TokenKind.plus), accept(TokenKind.minus)) ~ term_expr).map {
+    lazy val unary_expr: Parser[_ <: Ast.Expr] = (any(accept(TokenKind.not), accept(TokenKind.minus), accept(TokenKind.plus)) ~! term_expr).map {
       case (opToken, expr) => Ast.UnaryExpr(op = opToken.unaryOp, expr = expr, pos = opToken.pos)
     }
     lazy val mult_expr: Parser[_ <: Ast.Expr] = arith2_expr(TokenKind.multiply, TokenKind.divide)(any(unary_expr, term_expr))
@@ -411,10 +424,10 @@ object Parser {
     lazy val string_expr: Parser[_ <: Ast.Expr] = bin2_expr(TokenKind.contains, TokenKind.notContains)(comp_expr)
     lazy val logical_and_expr: Parser[_ <: Ast.Expr] = logical_expr(TokenKind.and)(string_expr)
     lazy val logical_or_expr: Parser[_ <: Ast.Expr] = logical_expr(TokenKind.or)(logical_and_expr)
-    lazy val expr: Parser[_ <: Ast.Expr] = logical_or_expr
+    lazy val expr: Parser[_ <: Ast.Expr] = logical_or_expr.trace("expr")
 
     lazy val table: Parser[Ast.Table] = acceptName.map(nameAndTok => Ast.Table(name = nameAndTok.name, tok = nameAndTok.tok))
-    lazy val where: Parser[Ast.Where] = (acceptIdent("where") ~! expr).map { case (w, expr) => Ast.Where(expr, w.pos) }
+    lazy val where: Parser[Ast.Where] = (acceptIdent("where") ~! expr).map { case (w, expr) => Ast.Where(expr, w.pos) }.trace("where")
     lazy val extend: Parser[Ast.Extend] = (acceptIdent("extend") ~! acceptName ~ (accept(TokenKind.assign) ~> expr)).map {
       case ((e, nameAndTok), expr) => Ast.Extend(name = nameAndTok, expr = expr, pos = e.pos)
     }
@@ -451,7 +464,7 @@ object Parser {
       case (table, Some(ops)) => ops.foldLeft[Ast.Source](table) {
         case (acc, op) => Ast.Cont(acc, op)
       }
-    }
+    }.trace("toplevel")
   }
 
   def parseWith[A](tokens: Iterable[Token], parser: Parser[A]): St[A] = {
