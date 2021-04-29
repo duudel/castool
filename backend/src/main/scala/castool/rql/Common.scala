@@ -1,6 +1,8 @@
 package castool.rql
 
 import scala.collection.SeqMap
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 object ValueType extends Enumeration {
   val Null: Value = Value
@@ -40,7 +42,16 @@ object Date {
   def fromString(s: String): scala.util.Try[Date] = {
     scala.util.Try {
       java.time.Instant.parse(s)
-    }.orElse(scala.util.Try {
+    }
+    .orElse(scala.util.Try {
+      java.time.OffsetDateTime.parse(s)
+        .toInstant()
+    })
+    .orElse(scala.util.Try {
+      java.time.LocalDateTime.parse(s)
+        .toInstant(ZoneOffset.UTC)
+    })
+    .orElse(scala.util.Try {
       java.time.LocalDate.parse(s)
         .atStartOfDay()
         .atOffset(java.time.ZoneOffset.UTC)

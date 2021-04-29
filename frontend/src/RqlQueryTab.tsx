@@ -39,6 +39,7 @@ enum RqlValueType {
   Null = "Null",
   Bool = "Bool",
   Num = "Num",
+  Date = "Date",
   Str = "Str",
   Obj = "Obj",
 }
@@ -65,10 +66,13 @@ enum RqlValueType {
 type RqlNull = null;
 type RqlBool = boolean;
 type RqlNum = number;
+type RqlDate = { date: string; };
 type RqlStr = string;
-type RqlObj = object;
+type RqlObj = {
+  [key: string]: RqlObj;
+};
 
-type RqlValue = RqlNull | RqlBool | RqlNum | RqlStr | RqlObj;
+type RqlValue = RqlNull | RqlBool | RqlNum | RqlDate | RqlStr | RqlObj;
 
 
 interface RqlMessageSuccess {
@@ -117,7 +121,19 @@ function valueToString(value: RqlValue): string {
   else if (typeof value === "boolean") return value ? "true" : "false";
   else if (typeof value === "number") return value.toString();
   else if (typeof value === "string") return value;
+  else if (is_date(value)) return value.date;
   else return "{...}";
+}
+
+function is_date(value: RqlValue): value is RqlDate {
+  if (value === null) return false;
+  return typeof value === "object" && value.date !== undefined;
+}
+
+function dateToString(value: RqlDate): string {
+  const dt = new Date(value.date);
+  //return dt.toISOString();
+  return dt.toLocaleString();
 }
 
 function renderValue(value: RqlValue) {
@@ -125,6 +141,7 @@ function renderValue(value: RqlValue) {
   else if (typeof value === "boolean") return <BooleanValue>{value ? "true" : "false"}</BooleanValue>;
   else if (typeof value === "number") return <NumberValue>{value}</NumberValue>;
   else if (typeof value === "string") return <TextValue>{value}</TextValue>;
+  else if (is_date(value)) return <NumberValue>{dateToString(value)}</NumberValue>;
   else if (typeof value === "object") return <LargeValue>{"{...}"}</LargeValue>;
 }
 
