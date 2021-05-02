@@ -22,7 +22,7 @@ object RqlMessage {
     case rql.Num(v) => Json.fromDoubleOrNull(v)
     case rql.Date(v) => Json.obj("date" -> Json.fromString(v.toString))
     case rql.Str(v) => Json.fromString(v)
-    case rql.Obj(v) => rql.Obj(v).asJson
+    case rql.Obj(v) => Json.obj("obj" -> rql.Obj(v).asJson)
   }
   implicit val valueDecoder: Decoder[rql.Value] = deriveDecoder
 

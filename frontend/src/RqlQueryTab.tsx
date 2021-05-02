@@ -69,7 +69,9 @@ type RqlNum = number;
 type RqlDate = { date: string; };
 type RqlStr = string;
 type RqlObj = {
-  [key: string]: RqlObj;
+  obj: {
+    [key: string]: RqlValue;
+  };
 };
 
 type RqlValue = RqlNull | RqlBool | RqlNum | RqlDate | RqlStr | RqlObj;
@@ -127,13 +129,18 @@ function valueToString(value: RqlValue): string {
 
 function is_date(value: RqlValue): value is RqlDate {
   if (value === null) return false;
-  return typeof value === "object" && value.date !== undefined;
+  return typeof value === "object" && "date" in value;
+  //value.date !== undefined;
+}
+
+function is_object(value: RqlValue): value is RqlObj {
+  if (value === null) return false;
+  return typeof value === "object" && "obj" in value;
 }
 
 function dateToString(value: RqlDate): string {
   const dt = new Date(value.date);
-  //return dt.toISOString();
-  return dt.toLocaleString();
+  return dt.toISOString();
 }
 
 function renderValue(value: RqlValue) {
@@ -142,6 +149,7 @@ function renderValue(value: RqlValue) {
   else if (typeof value === "number") return <NumberValue>{value}</NumberValue>;
   else if (typeof value === "string") return <TextValue>{value}</TextValue>;
   else if (is_date(value)) return <NumberValue>{dateToString(value)}</NumberValue>;
+  else if (is_object(value)) return <LargeValue>{value.toString()}</LargeValue>;
   else if (typeof value === "object") return <LargeValue>{"{...}"}</LargeValue>;
 }
 
