@@ -155,6 +155,31 @@ case class AggregationDef[+A <: Value](
   finalPhase: (Value, Num) => Value,
 ) extends Callable[A]
 
+class Functions {
+  private val functions: scala.collection.mutable.Map[String, FunctionDef[_ <: Value]] = scala.collection.mutable.Map.empty
+  private val aggregations: scala.collection.mutable.Map[String, AggregationDef[_ <: Value]] = scala.collection.mutable.Map.empty
+  def functionDef(name: Name): Option[FunctionDef[Value]] = functions.get(name.n)
+  def aggregationDef(name: Name): Option[AggregationDef[Value]] = aggregations.get(name.n)
+
+  def addFunction[R <: Value: ValueTypeMapper](
+    name: Name, parameters: Seq[(String, ValueType)], eval: Eval.Eval[R]
+  ): Functions = {
+    val resultType = ResolveValueType.valueType[R]
+    val fd = FunctionDef(eval, parameters, resultType)
+    functions.+=(name.n -> fd)
+    this
+  }
+
+  def addAggregation[R <: Value: ValueTypeMapper](
+    name: Name, parameters: Seq[(String, ValueType)], init: Value, eval: Eval.Eval[R], finalPhase: (R, Num) => Value
+  ): Functions = {
+    val resultType = ResolveValueType.valueType[R]
+    val fd = AggregationDef(eval, parameters, resultType, init, finalPhase.asInstanceOf[(Value, Num) => Value])
+    aggregations.+=(name.n -> fd)
+    this
+  }
+}
+
 case class SourceDef(columns: SeqMap[Name, ValueType]) {
   def get(name: Name): Option[ValueType] = columns.get(name)
   def add(name: Name, valueType: ValueType): SourceDef = copy(columns = columns + (name -> valueType))

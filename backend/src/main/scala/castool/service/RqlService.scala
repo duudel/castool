@@ -99,29 +99,6 @@ object RqlService {
     rql.SourceDef(sourceDef)
   }
 
-  class Functions {
-    private val functions: scala.collection.mutable.Map[String, rql.FunctionDef[_ <: rql.Value]] = scala.collection.mutable.Map.empty
-    private val aggregations: scala.collection.mutable.Map[String, rql.AggregationDef[_ <: rql.Value]] = scala.collection.mutable.Map.empty
-    def functionDef(name: rql.Name): Option[rql.FunctionDef[rql.Value]] = functions.get(name.n)
-    def aggregationDef(name: rql.Name): Option[rql.AggregationDef[rql.Value]] = aggregations.get(name.n)
-
-    def addFunction[R <: rql.Value](name: rql.Name, parameters: Seq[(String, rql.ValueType)], eval: rql.Eval.Eval[R])(implicit mapper: rql.ValueTypeMapper[R]): Functions = {
-      val resultType = mapper.valueType
-      val fd = rql.FunctionDef(eval, parameters, resultType)
-      functions.+=(name.n -> fd)
-      this
-    }
-
-    def addAggregation[R <: rql.Value](
-      name: rql.Name, parameters: Seq[(String, rql.ValueType)], init: rql.Value, eval: rql.Eval.Eval[R], finalPhase: (R, rql.Num) => rql.Value
-    )(implicit mapper: rql.ValueTypeMapper[R]): Functions = {
-      val resultType = mapper.valueType
-      val fd = rql.AggregationDef(eval, parameters, resultType, init, finalPhase.asInstanceOf[(rql.Value, rql.Num) => rql.Value])
-      aggregations.+=(name.n -> fd)
-      this
-    }
-  }
-
   val b64decoder = java.util.Base64.getDecoder()
   val b64encoder = java.util.Base64.getEncoder()
 
@@ -155,12 +132,13 @@ object RqlService {
   import rql.ResolveValueType._
   import rql.Name.NameInterpolator
 
-  val builtins = new Functions()
+  val builtins = new rql.Functions()
     .addFunction(n"atob", Seq("encodedData" -> rql.ValueType.Str), rql.Eval(atob))
     .addFunction(n"btoa", Seq("stringToEncode" -> rql.ValueType.Str), rql.Eval(btoa))
     .addFunction(n"blobAsString", Seq("blob" -> rql.ValueType.Blob), rql.Eval(blobAsString))
-    .addFunction(n"uuid_to_date", Seq("uuid_str" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
-    .addFunction(n"str_length", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
+    .addFunction(n"uuidToDate", Seq("uuid" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
+    .addFunction(n"stringLength", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
+    //.addFunction(n"bin", Seq("value" -> rql.ValueType.Any, "roundTo" -> rql.ValueType.Any), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
     .addAggregation[rql.Num](n"count", Seq("x" -> rql.ValueType.Num), rql.Num(0), rql.Eval(() => rql.Num(1)), (x, num) => num)
     .addAggregation(n"average",
       parameters = Seq("acc" -> rql.ValueType.Num, "x" -> rql.ValueType.Num),
