@@ -119,6 +119,10 @@ object Execution {
             case (Date(x), Date(y)) => if (x == y) 0 else if (x.isBefore(y)) -1 else 1
             case (Str(x), Str(y)) => x.compare(y)
             case (Obj(x), Obj(y)) => -1 // TODO: figure out how to compare or treat as an error in sem check
+            case (Blob(x), Blob(y)) => x.zip(y).collectFirst { case (a, b) if a != b => (a, b) } match {
+              case Some((a, b)) => if (a < b) -1 else if (a > b) 1 else 0
+              case None => if (x.size < y.size) -1 else if (x.size > y.size) 1 else 0
+            }
             case x => throw new MatchError(x)
           }
         } else {

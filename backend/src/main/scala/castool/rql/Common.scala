@@ -11,6 +11,7 @@ object ValueType extends Enumeration {
   val Date: Value = Value
   val Str: Value = Value
   val Obj: Value = Value
+  val Blob: Value = Value
 }
 
 trait ValueTypeMapper[A <: Value] {
@@ -25,6 +26,7 @@ object ResolveValueType {
   implicit val imp_date: ValueTypeMapper[Date] = ValueTypeMapperImpl[Date](ValueType.Date)
   implicit val imp_str: ValueTypeMapper[Str] = ValueTypeMapperImpl[Str](ValueType.Str)
   implicit val imp_obj: ValueTypeMapper[Obj] = ValueTypeMapperImpl[Obj](ValueType.Obj)
+  implicit val imp_blob: ValueTypeMapper[Blob] = ValueTypeMapperImpl[Blob](ValueType.Blob)
 
   implicit def valueType[A <: Value](implicit m: ValueTypeMapper[A]): ValueType = m.valueType
 }
@@ -37,6 +39,7 @@ final case class Num(v: Double) extends Value
 final case class Date(v: java.time.Instant) extends Value
 final case class Str(v: String) extends Value
 final case class Obj(v: Map[String, Value]) extends Value
+final case class Blob(v: Array[Byte]) extends Value
 
 object Date {
   def fromString(s: String): scala.util.Try[Date] = {
@@ -57,6 +60,21 @@ object Date {
         .atOffset(java.time.ZoneOffset.UTC)
         .toInstant()
     }).map(instant => Date(instant))
+  }
+}
+
+object Blob {
+  import java.util.Base64
+  def fromBase64(s: String): Blob = {
+    val bytes = Base64.getDecoder().decode(s)
+    Blob(bytes)
+  }
+  def toBase64(b: Blob): String = {
+    val bytes = Base64.getEncoder().encode(b.v)
+    new String(bytes)
+  }
+  def concat(a: Blob, b: Blob): Blob = {
+    Blob(a.v.concat(b.v))
   }
 }
 

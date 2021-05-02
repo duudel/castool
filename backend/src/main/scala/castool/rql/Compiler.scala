@@ -148,6 +148,7 @@ object Compiler {
               (va, vb) match {
                 case (Num(a), Num(b)) => Num(a + b).asInstanceOf[A]
                 case (Str(a), Str(b)) => Str(a + b).asInstanceOf[A]
+                case (a: Blob, b: Blob) => Blob.concat(a, b).asInstanceOf[A]
                 case (a, b) => throw new MatchError((a, op, b))
               }
             }
@@ -181,7 +182,11 @@ object Compiler {
           case BinaryOp.Equal => (input: InputRow) => {
               val va = compiledA.eval(input)
               val vb = compiledB.eval(input)
-              Bool(va == vb).asInstanceOf[A]
+              val result = (va, vb) match {
+                case (Blob(a), Blob(b)) => a.sameElements(b)
+                case (a, b) => a == b
+              }
+              Bool(result).asInstanceOf[A]
             }
 
           case BinaryOp.NotEqual => (input: InputRow) => {

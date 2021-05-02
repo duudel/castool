@@ -15,12 +15,11 @@ import org.http4s.websocket.WebSocketFrame
 import zio._
 import zio.stream._
 import zio.interop.catz._
-//import zio.interop.catz.implicits._
 
 import com.datastax.oss.driver.api.core.cql
 import com.datastax.oss.driver.api.core.`type`.DataTypes
 
-import scala.collection.JavaConverters._
+import scala.jdk.javaapi.CollectionConverters._
 
 import castool.configuration
 import castool.cassandra.{CassandraSession, ColumnValue, ResultRow, Metadata, QueryResponse}

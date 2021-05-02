@@ -36,7 +36,7 @@ object RqlService {
   def convertDataType(ct: ColumnValue.DataType.Value): rql.ValueType = ct match {
     case ColumnValue.DataType.Ascii     => rql.ValueType.Str
     case ColumnValue.DataType.BigInt    => rql.ValueType.Num
-    case ColumnValue.DataType.Blob      => rql.ValueType.Str
+    case ColumnValue.DataType.Blob      => rql.ValueType.Blob
     case ColumnValue.DataType.Bool      => rql.ValueType.Bool
     case ColumnValue.DataType.Counter   => rql.ValueType.Num
     case ColumnValue.DataType.Date      => rql.ValueType.Str
@@ -65,7 +65,7 @@ object RqlService {
     case cassandra.ColumnValues.Null          => rql.Null
     case cassandra.ColumnValues.Ascii(v)      => rql.Str(v)
     case cassandra.ColumnValues.BigInt(v)     => rql.Num(v.toDouble)
-    case cassandra.ColumnValues.Blob(v)       => rql.Str(v)
+    case cassandra.ColumnValues.Blob(v)       => rql.Blob(v)
     case cassandra.ColumnValues.Bool(v)       => rql.Bool(v)
     case cassandra.ColumnValues.Counter(v)    => rql.Num(v.toDouble)
     case cassandra.ColumnValues.Date(v)       => rql.Str(v.toString) // TODO: add Date to rql
@@ -113,20 +113,30 @@ object RqlService {
     }
 
     def addAggregation[R <: rql.Value](
-      name: rql.Name, parameters: Seq[(String, rql.ValueType)], init: rql.Value, eval: rql.Eval.Eval[R], finalPhase: (rql.Value, rql.Num) => rql.Value
+      name: rql.Name, parameters: Seq[(String, rql.ValueType)], init: rql.Value, eval: rql.Eval.Eval[R], finalPhase: (R, rql.Num) => rql.Value
     )(implicit mapper: rql.ValueTypeMapper[R]): Functions = {
       val resultType = mapper.valueType
-      val fd = rql.AggregationDef(eval, parameters, resultType, init, finalPhase)
+      val fd = rql.AggregationDef(eval, parameters, resultType, init, finalPhase.asInstanceOf[(rql.Value, rql.Num) => rql.Value])
       aggregations.+=(name.n -> fd)
       this
     }
   }
 
   val b64decoder = java.util.Base64.getDecoder()
+  val b64encoder = java.util.Base64.getEncoder()
 
-  val atob = (blob: rql.Str) => {
-    val bytes = b64decoder.decode(blob.v)
+  val atob = (str: rql.Str) => {
+    val bytes = b64decoder.decode(str.v)
     rql.Str(new String(bytes))
+  }
+
+  val btoa = (str: rql.Str) => {
+    val bytes = b64encoder.encode(str.v.getBytes())
+    rql.Str(new String(bytes))
+  }
+
+  val blobAsString = (blob: rql.Blob) => {
+    rql.Str(new String(blob.v))
   }
 
   val uuid_to_date = (v: rql.Str) => {
@@ -146,9 +156,18 @@ object RqlService {
   import rql.Name.NameInterpolator
 
   val builtins = new Functions()
-    .addFunction(n"atob", Seq("b" -> rql.ValueType.Str), rql.Eval(atob))
+    .addFunction(n"atob", Seq("encodedData" -> rql.ValueType.Str), rql.Eval(atob))
+    .addFunction(n"btoa", Seq("stringToEncode" -> rql.ValueType.Str), rql.Eval(btoa))
+    .addFunction(n"blobAsString", Seq("blob" -> rql.ValueType.Blob), rql.Eval(blobAsString))
     .addFunction(n"uuid_to_date", Seq("uuid_str" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
-    .addAggregation(n"count", Seq(), rql.Num(0), rql.Eval(() => rql.Null), (_, num) => num)
+    .addFunction(n"str_length", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
+    .addAggregation[rql.Null.type](n"count", Seq(), rql.Num(0), rql.Eval(() => rql.Null), (x, num) => num)
+    .addAggregation(n"average",
+      parameters = Seq("acc" -> rql.ValueType.Num, "x" -> rql.ValueType.Num),
+      init = rql.Num(0),
+      eval = rql.Eval((acc: rql.Num, x: rql.Num) => rql.Num(acc.v + x.v)),
+      finalPhase = (result: rql.Num, num) => rql.Num(result.v / num.v)
+    )
 
   private class ServiceImpl(casSession: cassandra.CassandraSession.Service) extends Service {
     def compilationEnv: IO[Throwable, rql.Compiler.Env] = {

@@ -197,6 +197,7 @@ object SemCheck {
         (exprA.resultType, exprB.resultType) match {
           case (ValueType.Num, ValueType.Num) => ZIO.succeed(ValueType.Num)
           case (ValueType.Str, ValueType.Str) => ZIO.succeed(ValueType.Str)
+          case (ValueType.Blob, ValueType.Blob) => ZIO.succeed(ValueType.Blob)
           case (a, b) => fail(s"Incompatible types for expression $a ${op.display} $b")
         }
       case BinaryOp.Minus | BinaryOp.Multiply | BinaryOp.Divide =>

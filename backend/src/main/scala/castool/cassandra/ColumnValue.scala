@@ -11,7 +11,6 @@ import io.circe.Json
 
 import com.datastax.oss.driver.api.core.cql
 import com.datastax.oss.driver.api.core.`type`.{DataType => CasDataType}
-import java.util.Base64
 import java.net.InetAddress
 
 import scala.util.Try
@@ -55,9 +54,7 @@ object ColumnValue {
         if (buf == null) {
           Null
         } else {
-          val encoder = Base64.getEncoder()
-          val b64 = encoder.encode(buf)
-          Blob(new String(b64.array()))
+          Blob(buf.array())
         }
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BOOLEAN =>
         fromValue(Bool)(row.get(index, classOf[Boolean]))
@@ -209,7 +206,7 @@ object ColumnValues {
 
   case class Ascii(v: String) extends ColumnValue // ProtocolConstants.DataType.ASCII
   case class BigInt(v: Long) extends ColumnValue // ProtocolConstants.DataType.BIGINT
-  case class Blob(v: String) extends ColumnValue // ProtocolConstants.DataType.BLOB
+  case class Blob(v: Array[Byte]) extends ColumnValue // ProtocolConstants.DataType.BLOB
   case class Bool(v: Boolean) extends ColumnValue // ProtocolConstants.DataType.BOOLEAN
   case class Counter(v: Long) extends ColumnValue // ProtocolConstants.DataType.COUNTER
   case class Decimal(v: scala.BigDecimal) extends ColumnValue // ProtocolConstants.DataType.DECIMAL
