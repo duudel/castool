@@ -161,7 +161,7 @@ object RqlService {
     .addFunction(n"blobAsString", Seq("blob" -> rql.ValueType.Blob), rql.Eval(blobAsString))
     .addFunction(n"uuid_to_date", Seq("uuid_str" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
     .addFunction(n"str_length", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
-    .addAggregation[rql.Null.type](n"count", Seq(), rql.Num(0), rql.Eval(() => rql.Null), (x, num) => num)
+    .addAggregation[rql.Num](n"count", Seq("x" -> rql.ValueType.Num), rql.Num(0), rql.Eval(() => rql.Num(1)), (x, num) => num)
     .addAggregation(n"average",
       parameters = Seq("acc" -> rql.ValueType.Num, "x" -> rql.ValueType.Num),
       init = rql.Num(0),

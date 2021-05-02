@@ -225,15 +225,36 @@ object SemCheck {
     }
   }
 
+  def assignCompatible(to: ValueType, from: ValueType): Boolean = {
+    (to == from) || from == ValueType.Null
+  }
+
   def checkFunctionCall(ast: Ast.FunctionCall, sourceDef: SourceDef): Result[Checked.FunctionCall[Value]] = {
     for {
       functionDef <- ZIO.accessM[Env] { env =>
         ZIO.fromOption(env.functionDef(ast.functionName))
           .mapError(_ => Error(s"No such function as '${ast.functionName.n}' found", Location(ast.pos)))
       }
-      // TODO: check parameters
       args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
-    } yield Checked.FunctionCall(functionDef, args.toSeq)
+      _ <- checkArgs(ast, functionDef, args)
+    } yield Checked.FunctionCall(functionDef, args)
+  }
+
+  def checkArgs(ast: Ast.FunctionCall, functionDef: FunctionDef[_], args: Seq[Checked.Expr[_]]): Result[Unit] = {
+    if (functionDef.parameters.size != args.size) {
+      ZIO.fail(Error(s"Function '${ast.functionName.n}' expecting ${functionDef.parameters.size} arguments, got ${args.size}", Location(ast.pos)))
+    } else {
+      ast.args.map(_.pos).zip(args).zip(functionDef.parameters).find {
+        case ((pos, checked), (name, valueType)) =>
+          !assignCompatible(valueType, checked.resultType)
+      } match {
+        case Some(((pos, checked), (name, valueType))) =>
+          val err = s"Expected $valueType for parameter '$name', got ${checked.resultType}"
+          ZIO.fail(Error(err, Location(pos)))
+        case None =>
+          ZIO.unit
+      }
+    }
   }
 
   def checkAggregationCall(ast: Ast.FunctionCall, sourceDef: SourceDef): Result[Checked.AggregationCall[Value]] = {
@@ -242,9 +263,28 @@ object SemCheck {
         ZIO.fromOption(env.aggregationDef(ast.functionName))
           .mapError(_ => Error(s"No such aggregation function as '${ast.functionName.n}' found", Location(ast.pos)))
       }
-      // TODO: check parameters
       args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
-    } yield Checked.AggregationCall(aggregationDef, args.toSeq)
+      _ <- checkAggregationArgs(ast, aggregationDef, args)
+    } yield Checked.AggregationCall(aggregationDef, args)
+  }
+
+  def checkAggregationArgs(ast: Ast.FunctionCall, aggregationDef: AggregationDef[_], args: Seq[Checked.Expr[_]]): Result[Unit] = {
+    // Drop the first parameter, as it is the accumulator, passed in implicitly during execution.
+    val parameters = aggregationDef.parameters.drop(1)
+    if (parameters.size != args.size) {
+      ZIO.fail(Error(s"Aggregation function '${ast.functionName.n}' expecting ${parameters.size} arguments, got ${args.size}", Location(ast.pos)))
+    } else {
+      ast.args.map(_.pos).zip(args).zip(parameters).find {
+        case ((pos, checked), (name, paramType)) =>
+          !assignCompatible(paramType, checked.resultType)
+      } match {
+        case Some(((pos, checked), (name, paramType))) =>
+          val err = s"Expected $paramType for parameter '$name', got ${checked.resultType}"
+          ZIO.fail(Error(err, Location(pos)))
+        case None =>
+          ZIO.unit
+      }
+    }
   }
 
 }
