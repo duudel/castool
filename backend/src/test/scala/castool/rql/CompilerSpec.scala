@@ -23,24 +23,17 @@ object CompilerSpec {
   }
 
   val testCompilationEnv = {
-    val aggregations = Map(
-      n"count" -> AggregationDef(
-        evaluate = Eval((acc: Null.type) => Null),
-        returnType = ValueType.Num,
-        parameters = Seq.empty,
-        initialValue = Null,
-        finalPhase = (acc, n) => n
-      )
-    )
+    import ResolveValueType._
+    val functions = new Functions()
+      .addFunction(n"not", Seq("b" -> ValueType.Bool), Eval((b: Bool) => Bool(!b.v)))
+      .addAggregation(n"count", Seq("x" -> ValueType.Num), Num(0), Eval(() => Num(1)), (_: Num, n) => n)
     new Compiler.Env {
       def tableDef(name: Name): Option[SourceDef] = {
         if (name == n"TestTable") Some(SourceDef(n"test_column" -> ValueType.Str, n"flag" -> ValueType.Bool))
         else None
       }
-      def functionDef(name: Name): Option[FunctionDef[Value]] =
-        if (name == n"not") Some(FunctionDef(Eval((b: Bool) => Bool(!b.v)), Seq("b" -> ValueType.Bool), ValueType.Bool))
-        else None
-      def aggregationDef(name: Name): Option[AggregationDef[Value]] = aggregations.get(name)
+      def functionDef(name: Name, argTypes: Seq[ValueType]): Option[FunctionDef[Value]] = functions.functionDef(name, argTypes)
+      def aggregationDef(name: Name): Option[AggregationDef[Value]] = functions.aggregationDef(name)
     }
   }
 

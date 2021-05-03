@@ -137,8 +137,9 @@ object RqlService {
     .addFunction(n"btoa", Seq("stringToEncode" -> rql.ValueType.Str), rql.Eval(btoa))
     .addFunction(n"blobAsString", Seq("blob" -> rql.ValueType.Blob), rql.Eval(blobAsString))
     .addFunction(n"uuidToDate", Seq("uuid" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
-    .addFunction(n"stringLength", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
-    //.addFunction(n"bin", Seq("value" -> rql.ValueType.Any, "roundTo" -> rql.ValueType.Any), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
+    .addFunction(n"length", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
+    .addFunction(n"length", Seq("blob" -> rql.ValueType.Blob), rql.Eval((blob: rql.Blob) => rql.Num(blob.v.length)))
+    .addFunction(n"bin", Seq("value" -> rql.ValueType.Num, "roundTo" -> rql.ValueType.Num), rql.Eval((value: rql.Num, roundTo: rql.Num) => rql.Num((value.v/roundTo.v).round * roundTo.v)))
     .addAggregation[rql.Num](n"count", Seq("x" -> rql.ValueType.Num), rql.Num(0), rql.Eval(() => rql.Num(1)), (x, num) => num)
     .addAggregation(n"average",
       parameters = Seq("acc" -> rql.ValueType.Num, "x" -> rql.ValueType.Num),
@@ -166,7 +167,7 @@ object RqlService {
           tables.get(name.n)
         }
 
-        def functionDef(name: Name): Option[FunctionDef[Value]] = builtins.functionDef(name)
+        def functionDef(name: Name, argumentTypes: Seq[rql.ValueType]): Option[FunctionDef[Value]] = builtins.functionDef(name, argumentTypes)
         def aggregationDef(name: Name): Option[AggregationDef[Value]] = builtins.aggregationDef(name)
       }
     }

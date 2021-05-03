@@ -14,7 +14,7 @@ object SemCheckSpec {
 
   val env = new SemCheck.Env {
     def tableDef(name: Name): Option[SourceDef] = tables.get(name)
-    def functionDef(name: Name): Option[FunctionDef[Value]] = None
+    def functionDef(name: Name, argTypes: Seq[ValueType]): Option[FunctionDef[Value]] = None
     def aggregationDef(name: Name): Option[AggregationDef[Value]] = None
   }
 

@@ -156,9 +156,14 @@ case class AggregationDef[+A <: Value](
 ) extends Callable[A]
 
 class Functions {
-  private val functions: scala.collection.mutable.Map[String, FunctionDef[_ <: Value]] = scala.collection.mutable.Map.empty
+  private val functions: scala.collection.mutable.Map[String, Seq[FunctionDef[_ <: Value]]] = scala.collection.mutable.Map.empty
   private val aggregations: scala.collection.mutable.Map[String, AggregationDef[_ <: Value]] = scala.collection.mutable.Map.empty
-  def functionDef(name: Name): Option[FunctionDef[Value]] = functions.get(name.n)
+  //def functionDef(name: Name): Option[FunctionDef[Value]] = functions.get(name.n)
+  def functionDef(name: Name, argumentTypes: Seq[ValueType]): Option[FunctionDef[Value]] = functions.get(name.n).flatMap { candidates =>
+    candidates.find { candidate =>
+      candidate.parameters.map(_._2) == argumentTypes
+    }
+  }
   def aggregationDef(name: Name): Option[AggregationDef[Value]] = aggregations.get(name.n)
 
   def addFunction[R <: Value: ValueTypeMapper](
@@ -166,7 +171,11 @@ class Functions {
   ): Functions = {
     val resultType = ResolveValueType.valueType[R]
     val fd = FunctionDef(eval, parameters, resultType)
-    functions.+=(name.n -> fd)
+    functions.updateWith(name.n) {
+      case Some(existing) => Some(existing :+ fd)
+      case None => Some(Seq(fd))
+    }
+    //functions.+=(name.n -> fd)
     this
   }
 

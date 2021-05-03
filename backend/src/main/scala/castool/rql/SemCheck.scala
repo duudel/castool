@@ -50,7 +50,7 @@ object SemCheck {
 
   trait Env {
     def tableDef(name: Name): Option[SourceDef]
-    def functionDef(name: Name): Option[FunctionDef[Value]]
+    def functionDef(name: Name, argumentTypes: Seq[ValueType]): Option[FunctionDef[Value]]
     def aggregationDef(name: Name): Option[AggregationDef[Value]]
   }
 
@@ -231,11 +231,11 @@ object SemCheck {
 
   def checkFunctionCall(ast: Ast.FunctionCall, sourceDef: SourceDef): Result[Checked.FunctionCall[Value]] = {
     for {
+      args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
       functionDef <- ZIO.accessM[Env] { env =>
-        ZIO.fromOption(env.functionDef(ast.functionName))
+        ZIO.fromOption(env.functionDef(ast.functionName, args.map(_.resultType)))
           .mapError(_ => Error(s"No such function as '${ast.functionName.n}' found", Location(ast.pos)))
       }
-      args <- ZIO.foreach(ast.args) { expr => checkExpr(expr, sourceDef) }
       _ <- checkArgs(ast, functionDef, args)
     } yield Checked.FunctionCall(functionDef, args)
   }
