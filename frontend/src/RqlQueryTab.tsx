@@ -3,14 +3,17 @@ import styled from 'styled-components';
 
 import { useWebsocket } from "./utils/UseWebsocketHook";
 import useSessionStorage from "./utils/UseSessionStorageHook";
+//import { RqlValue, RqlValueType, is_date, is_object } from "./server-rql/RqlValue";
+import * as rql from "./server-rql/index";
+import {RqlBool} from "./server-rql/RqlValue";
 
 interface ResultRow {
   num: number;
-  columns: RqlValue[];
+  columns: rql.Value[];
 }
 
 interface QueryResult {
-  columns: [string, RqlValueType][];
+  columns: [string, rql.ValueType][];
   rows: ResultRow[];
 }
 
@@ -35,51 +38,9 @@ interface OnMessage {
 
 type Action = OnMessage;
 
-enum RqlValueType {
-  Null = "Null",
-  Bool = "Bool",
-  Num = "Num",
-  Date = "Date",
-  Str = "Str",
-  Obj = "Obj",
-}
-
-//interface RqlNull {
-//  Null: { }
-//}
-//interface RqlBool {
-//  Bool: { v: boolean; }
-//}
-//interface RqlNum {
-//  Num: { v: number; }
-//}
-//interface RqlStr {
-//  Str: { v: string }
-//}
-//interface RqlObj {
-//  Obj: {
-//    v: {
-//      [index: string]: RqlValue
-//    }
-//  }
-//}
-type RqlNull = null;
-type RqlBool = boolean;
-type RqlNum = number;
-type RqlDate = { date: string; };
-type RqlStr = string;
-type RqlObj = {
-  obj: {
-    [key: string]: RqlValue;
-  };
-};
-
-type RqlValue = RqlNull | RqlBool | RqlNum | RqlDate | RqlStr | RqlObj;
-
-
 interface RqlMessageSuccess {
   _type: "Success";
-  columns: [string, RqlValueType][];
+  columns: [string, rql.ValueType][];
 }
 interface RqlMessageError {
   _type: "Error";
@@ -114,46 +75,231 @@ const reducer = (state: State, action: Action): State => {
 };
 
 type ResultTableProps = {
-  columns: [string, RqlValueType][];
+  columns: [string, rql.ValueType][];
   rows: ResultRow[];
 };
 
-function valueToString(value: RqlValue): string {
-  if (value === null) return "null";
-  else if (typeof value === "boolean") return value ? "true" : "false";
-  else if (typeof value === "number") return value.toString();
-  else if (typeof value === "string") return value;
-  else if (is_date(value)) return value.date;
-  else return "{...}";
-}
-
-function is_date(value: RqlValue): value is RqlDate {
-  if (value === null) return false;
-  return typeof value === "object" && "date" in value;
-  //value.date !== undefined;
-}
-
-function is_object(value: RqlValue): value is RqlObj {
-  if (value === null) return false;
-  return typeof value === "object" && "obj" in value;
-}
-
-function dateToString(value: RqlDate): string {
+function dateToString(value: rql.Date): string {
   const dt = new Date(value.date);
   return dt.toISOString();
 }
 
-function renderValue(value: RqlValue) {
+class RqlPrinter implements rql.FoldHandler<void> {
+  indent: string;
+  result: string;
+
+  constructor() {
+    this.indent = "";
+    this.result = "";
+  }
+
+  getResult() {
+    return this.result;
+  }
+
+  put(s: string) {
+    this.result += s;
+    return this;
+  }
+
+  putIndent() {
+    this.result += this.indent;
+    return this;
+  }
+
+  nl() {
+    this.result += "\n";
+    return this;
+  }
+
+  indentMore() {
+    this.indent += "  ";
+    return this;
+  }
+
+  indentLess() {
+    this.indent = this.indent.substr(0, this.indent.length - 2);
+    return this;
+  }
+
+  putValue(value: rql.Value) {
+    rql.fold_value(this)(value);
+    return this;
+  }
+
+  null() { this.put("null"); }
+  bool(x: rql.Bool) { this.put(x ? "true" : "false"); }
+  num(x: rql.Num) { this.put(x.toString()); }
+  str(x: rql.Str) { this.put(`"${x}"`); }
+  date(x: rql.Date) { this.put(dateToString(x)); }
+  obj(x: rql.Obj) {
+    const fields = Object.entries(x.obj);
+    if (fields.length === 0) {
+      this.put("{ }");
+    } else {
+      this.put("{").nl().indentMore();
+      fields.forEach(([key, value]) => {
+        this.putIndent().put(key).put(": ").putValue(value).nl();
+      });
+      this.indentLess().putIndent().put("}");
+    }
+  }
+}
+
+class RqlJsonPrinter implements rql.FoldHandler<void> {
+  indent: string;
+  result: string;
+
+  constructor() {
+    this.indent = "";
+    this.result = "";
+  }
+
+  getResult() {
+    return this.result;
+  }
+
+  put(s: string) {
+    this.result += s;
+    return this;
+  }
+
+  putIndent() {
+    this.result += this.indent;
+    return this;
+  }
+
+  nl() {
+    this.result += "\n";
+    return this;
+  }
+
+  indentMore() {
+    this.indent += "  ";
+    return this;
+  }
+
+  indentLess() {
+    this.indent = this.indent.substr(0, this.indent.length - 2);
+    return this;
+  }
+
+  putValue(value: rql.Value) {
+    rql.fold_value(this)(value);
+    return this;
+  }
+
+  null() { this.put("null"); }
+  bool(x: rql.Bool) { this.put(x ? "true" : "false"); }
+  num(x: rql.Num) { this.put(x.toString()); }
+  str(x: rql.Str) { this.put(`"${x}"`); }
+  date(x: rql.Date) { this.put(`"${dateToString(x)}"`); }
+  obj(x: rql.Obj) {
+    const fields = Object.entries(x.obj);
+    if (fields.length === 0) {
+      this.put("{ }");
+    } else {
+      this.put("{").nl().indentMore();
+      fields.forEach(([key, value]) => {
+        this.putIndent().put(`"${key}"`).put(": ").putValue(value).put(",").nl();
+      });
+      this.indentLess().putIndent().put("}");
+    }
+  }
+}
+
+function objectToString(value: rql.Obj): string {
+  const printer = new RqlJsonPrinter()
+  printer.obj(value)
+  return printer.getResult();
+}
+
+const rqlStringFolder: rql.FoldHandler<string> = {
+  null: () => "null",
+  bool: x => x.toString(),
+  num: x => x.toString(),
+  str: x => x,
+  date: x => dateToString(x),
+  obj: x => objectToString(x),
+};
+
+function valueToString(value: rql.Value): string {
+  return rql.fold_value(rqlStringFolder)(value);
+}
+
+const rqlElementFolder: rql.FoldHandler<React.ReactElement> = {
+  null: () => <NullValue>null</NullValue>,
+  bool: x => <BooleanValue>{x ? "true" : "false"}</BooleanValue>,
+  num: x => <NumberValue>{x}</NumberValue>,
+  str: x => <TextValue>{x}</TextValue>,
+  date: x => <NumberValue>{dateToString(x)}</NumberValue>,
+  obj: x => <RQLObject obj={x} />
+};
+
+function renderRqlValue(value: rql.Value) {
+  return rql.fold_value(rqlElementFolder)(value);
+}
+
+type RQLObjectProps = {
+  obj: rql.Obj
+}
+
+function RQLObject(props: RQLObjectProps) {
+  const { obj } = props;
+  const [isOpen, setOpen] = useState(true);
+  const fields = Object.entries(obj.obj);
+  if (fields.length > 0) {
+    return (<>
+      <RQLObjectOpenParen onClick={() => setOpen(!isOpen)}>{isOpen ? "-" : "+"}{" {"}</RQLObjectOpenParen>
+      {isOpen ? (
+        fields.map(([key, value]) => {
+            return (
+            <RQLField>
+              <RQLFieldKey>{key}</RQLFieldKey>: {renderRqlValue(value)}
+            </RQLField>
+            );
+          })
+        ) : (
+          <RQLSpecial>...</RQLSpecial>
+        )
+      }
+      <RQLSpecial>{"}"}</RQLSpecial>
+    </>);
+  } else {
+    return <RQLSpecial>{"{ }"}</RQLSpecial>;
+  }
+}
+
+const RQLObjectOpenParen = styled.button`
+  margin-left: -8px;
+  padding: 2px;
+  color: #005050;
+`;
+
+const RQLSpecial = styled.span`
+  color: #005050;
+`;
+
+const RQLField = styled.div`
+  margin-left: 1em;
+`;
+
+const RQLFieldKey = styled.span`
+  color: #00a0a0;
+`;
+
+
+function renderValue(value: rql.Value) {
   if (value === null) return <NullValue>NULL</NullValue>;
   else if (typeof value === "boolean") return <BooleanValue>{value ? "true" : "false"}</BooleanValue>;
   else if (typeof value === "number") return <NumberValue>{value}</NumberValue>;
   else if (typeof value === "string") return <TextValue>{value}</TextValue>;
-  else if (is_date(value)) return <NumberValue>{dateToString(value)}</NumberValue>;
-  else if (is_object(value)) return <LargeValue>{value.toString()}</LargeValue>;
+  else if (rql.is_date(value)) return <NumberValue>{dateToString(value)}</NumberValue>;
+  else if (rql.is_object(value)) return <LargeValue><RQLObject obj={value} /></LargeValue>;
   else if (typeof value === "object") return <LargeValue>{"{...}"}</LargeValue>;
 }
 
-function copyValueToClipBoard(value: RqlValue) {
+function copyValueToClipBoard(value: rql.Value) {
   const str = valueToString(value);
   navigator.clipboard.writeText(str);
 }
@@ -417,22 +563,26 @@ const ColumnDataType = styled.span`
 `;
 
 const NullValue = styled.span`
-  color: #aa9;
+  /*color: #aa9;*/
+  color: #c000c0;
   font-size: 10pt;
   font-weight: bold;
 `;
 
 const BooleanValue = styled.span`
-  color: #22a;
+  /*color: #22a;*/
+  color: #c000c0;
   font-weight: bold;
 `;
 
 const NumberValue = styled.span`
-  color: #c2c;
+  /*color: #c2c;*/
+  color: #c000c0;
 `;
 
 const TextValue = styled.span`
-  color: #d22;
+  /*color: #d22;*/
+  color: #a0a000;
 `;
 
 const LargeValue = styled.div`
