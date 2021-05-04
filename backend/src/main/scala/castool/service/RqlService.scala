@@ -39,7 +39,7 @@ object RqlService {
     case ColumnValue.DataType.Blob      => rql.ValueType.Blob
     case ColumnValue.DataType.Bool      => rql.ValueType.Bool
     case ColumnValue.DataType.Counter   => rql.ValueType.Num
-    case ColumnValue.DataType.Date      => rql.ValueType.Str
+    case ColumnValue.DataType.Date      => rql.ValueType.Date
     case ColumnValue.DataType.Decimal   => rql.ValueType.Num
     case ColumnValue.DataType.Double    => rql.ValueType.Num
     case ColumnValue.DataType.Duration  => rql.ValueType.Str
@@ -50,7 +50,7 @@ object RqlService {
     case ColumnValue.DataType.Text      => rql.ValueType.Str
     case ColumnValue.DataType.Time      => rql.ValueType.Str
     case ColumnValue.DataType.TimeUuid  => rql.ValueType.Str
-    case ColumnValue.DataType.Timestamp => rql.ValueType.Str
+    case ColumnValue.DataType.Timestamp => rql.ValueType.Date
     case ColumnValue.DataType.TinyInt   => rql.ValueType.Num
     case ColumnValue.DataType.Uuid      => rql.ValueType.Str
     case ColumnValue.DataType.VarInt    => rql.ValueType.Num
@@ -68,7 +68,7 @@ object RqlService {
     case cassandra.ColumnValues.Blob(v)       => rql.Blob(v)
     case cassandra.ColumnValues.Bool(v)       => rql.Bool(v)
     case cassandra.ColumnValues.Counter(v)    => rql.Num(v.toDouble)
-    case cassandra.ColumnValues.Date(v)       => rql.Str(v.toString) // TODO: add Date to rql
+    case cassandra.ColumnValues.Date(v)       => rql.Date(v.atStartOfDay().atOffset(java.time.ZoneOffset.UTC).toInstant()) // TODO: add Date to RQL, change current Date to Timestamp?
     case cassandra.ColumnValues.Decimal(v)    => rql.Num(v.bigDecimal.doubleValue())
     case cassandra.ColumnValues.Double(v)     => rql.Num(v)
     case cassandra.ColumnValues.Duration(v)   => rql.Str(v)
@@ -79,7 +79,7 @@ object RqlService {
     case cassandra.ColumnValues.Text(v)       => rql.Str(v)
     case cassandra.ColumnValues.Time(v)       => rql.Str(v.toString)
     case cassandra.ColumnValues.TimeUuid(v)   => rql.Str(v.toString) // TODO: add TimeUuid to rql?
-    case cassandra.ColumnValues.Timestamp(v)  => rql.Str(v.toString) // TODO: add timestamp to rql
+    case cassandra.ColumnValues.Timestamp(v)  => rql.Date(v) // TODO: add timestamp to rql
     case cassandra.ColumnValues.TinyInt(v)    => rql.Num(v)
     case cassandra.ColumnValues.Uuid(v)       => rql.Str(v.toString) // TODO: add UUID to rql
     case cassandra.ColumnValues.VarInt(v)     => rql.Num(v.bigInteger.doubleValue())
@@ -129,6 +129,40 @@ object RqlService {
     }
   }
 
+  object JsonToRqlFolder extends io.circe.Json.Folder[rql.Value] {
+    def onNull: rql.Value = rql.Null
+    def onBoolean(value: Boolean): rql.Value = rql.Bool(value)
+    def onNumber(value: io.circe.JsonNumber): rql.Value = rql.Num(value.toDouble)
+    def onString(value: String): rql.Value = {
+      rql.Date
+        .fromString(value)
+        .getOrElse(rql.Str(value))
+    }
+    def onArray(value: Vector[io.circe.Json]): rql.Value = rql.Null // TODO: add array type
+    def onObject(value: io.circe.JsonObject): rql.Value = jsonObjectToRql(value)
+  }
+  def convertJsonToRql(json: io.circe.Json): rql.Value = {
+    json.foldWith(JsonToRqlFolder)
+  }
+
+  def jsonObjectToRql(jsonObj: io.circe.JsonObject): rql.Obj = {
+    val v = jsonObj.toMap.map {
+      case (key, value) =>
+        key -> convertJsonToRql(value)
+    }
+    rql.Obj(v)
+  }
+
+  val jsonToObject: rql.Str => rql.Obj = (v: rql.Str) => {
+    io.circe.parser.parse(v.v) match {
+      case Right(json) =>
+        json.asObject.map { jsonObj =>
+          jsonObjectToRql(jsonObj)
+        }.getOrElse(rql.Null.asInstanceOf[rql.Obj])
+      case Left(_) => rql.Null.asInstanceOf[rql.Obj]
+    }
+  }
+
   import rql.ResolveValueType._
   import rql.Name.NameInterpolator
 
@@ -140,6 +174,7 @@ object RqlService {
     .addFunction(n"length", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
     .addFunction(n"length", Seq("blob" -> rql.ValueType.Blob), rql.Eval((blob: rql.Blob) => rql.Num(blob.v.length)))
     .addFunction(n"bin", Seq("value" -> rql.ValueType.Num, "roundTo" -> rql.ValueType.Num), rql.Eval((value: rql.Num, roundTo: rql.Num) => rql.Num((value.v/roundTo.v).round * roundTo.v)))
+    .addFunction(n"jsonToObject", ("value", rql.ValueType.Str) :: Nil, rql.Eval(jsonToObject))
     .addAggregation[rql.Num](n"count", Seq("x" -> rql.ValueType.Num), rql.Num(0), rql.Eval(() => rql.Num(1)), (x, num) => num)
     .addAggregation(n"average",
       parameters = Seq("acc" -> rql.ValueType.Num, "x" -> rql.ValueType.Num),

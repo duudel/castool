@@ -4,7 +4,6 @@ import fs2.Stream
 import zio._
 import zio.interop.catz._
 import zio.stream._
-//import zio.interop.catz.implicits._
 
 import com.datastax.oss.driver.api.core.CqlSession
 import com.datastax.oss.driver.api.core.cql
@@ -28,16 +27,6 @@ private[cassandra] class CassandraSessionImpl(cqlSession: CqlSession) extends Ca
     stream
   }
 
-  /*
-  def query(q: String): Task[(Seq[ColumnDefinition], ZStream[Any, Throwable, ResultRow])] = IO {
-    val rs = cqlSession.execute(q)
-    val defs = rs
-      .getColumnDefinitions()
-      .asScala
-      .map(ColumnDefinition.fromDriverDef)
-      .toSeq
-    defs -> extractRows(rs)
-  }*/
   def query(q: String): zio.IO[Throwable, QueryResponse] = asyncQuery(q)
 
   private def qstreamTask(rsTask: Task[cql.AsyncResultSet]): Task[ZStream[Any, Throwable, cql.Row]] = {

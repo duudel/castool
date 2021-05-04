@@ -22,7 +22,7 @@ object RqlMessage {
     case rql.Num(v) => Json.fromDoubleOrNull(v)
     case rql.Date(v) => Json.obj("date" -> Json.fromString(v.toString))
     case rql.Str(v) => Json.fromString(v)
-    case o: rql.Obj => Json.obj("obj" -> o.asJson)
+    case o: rql.Obj => Json.obj("obj" -> o.v.asJson)
     case b: rql.Blob =>
       val s = rql.Blob.toBase64(b)
       Json.obj("blob" -> s.asJson)

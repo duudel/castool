@@ -17,11 +17,12 @@ lazy val root = project.in(file("."))
       "org.http4s"                   %% "http4s-dsl"            % Versions.http4s,
       "io.circe"                     %% "circe-core"            % Versions.circe,
       "io.circe"                     %% "circe-generic"         % Versions.circe,
+      "io.circe"                     %% "circe-parser"          % Versions.circe,
       "com.github.pureconfig"        %% "pureconfig"            % Versions.pureconfig,
       "ch.qos.logback"               % "logback-classic"        % "1.2.3",
       "com.datastax.oss"             % "java-driver-core"       % Versions.cassandraDriver,
     ),
   )
 
-  testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
+testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework")
 

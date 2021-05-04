@@ -14,34 +14,6 @@ import com.datastax.oss.driver.api.core.cql
 import castool.configuration._
 import castool.rql
 
-//object RqlSession {
-//  type RqlSession = Has[Service]
-//
-//  //case class ResultRow(num: Long, columns: Seq[rql.Value])
-//  
-//  case class QueryResult(columnDef: Seq[(String, rql.ValueType)], stream: rql.Execution.Stream)
-//
-//  trait Service {
-//    def query(q: String): IO[rql.Compiler.Error, QueryResult]
-//  }
-//
-//  def layer: ZLayer[CassandraSession, Throwable, RqlSession] = {
-//    ZLayer.fromEffect(
-//      for {
-//        cs <- ZIO.access[CassandraSession](_.get)
-//        metadata <- cs.metadata
-//      } yield {
-//        //metadata.keyspaces
-//        new Service {
-//          def query(q: String): zio.IO[castool.rql.Compiler.Error,QueryResult] = {
-//
-//          }
-//        }
-//      }
-//    )
-//  }
-//}
-
 object CassandraSession {
   type CassandraSession = Has[Service]
 
