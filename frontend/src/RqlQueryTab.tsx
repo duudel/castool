@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useReducer, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import styled from 'styled-components';
 
 import { useWebsocket } from "./utils/UseWebsocketHook";
 import useSessionStorage from "./utils/UseSessionStorageHook";
+import useNotifyClickOutside from "./utils/UseNotifyClickOutside";
 //import { RqlValue, RqlValueType, is_date, is_object } from "./server-rql/RqlValue";
 import * as rql from "./server-rql/index";
-import {RqlBool} from "./server-rql/RqlValue";
 
 interface ResultRow {
   num: number;
@@ -132,6 +132,17 @@ class RqlPrinter implements rql.FoldHandler<void> {
   num(x: rql.Num) { this.put(x.toString()); }
   str(x: rql.Str) { this.put(`"${x}"`); }
   date(x: rql.Date) { this.put(dateToString(x)); }
+  list(x: rql.List) {
+    if (x.length === 0) {
+      this.put("{ }");
+    } else {
+      this.put("[").nl().indentMore();
+      x.forEach(value => {
+        this.putIndent().putValue(value).put(",").nl();
+      });
+      this.indentLess().putIndent().put("]");
+    }
+  }
   obj(x: rql.Obj) {
     const fields = Object.entries(x.obj);
     if (fields.length === 0) {
@@ -143,6 +154,9 @@ class RqlPrinter implements rql.FoldHandler<void> {
       });
       this.indentLess().putIndent().put("}");
     }
+  }
+  blob(x: rql.Blob) {
+    this.put(`[${x.blob}]`)
   }
 }
 
@@ -194,23 +208,61 @@ class RqlJsonPrinter implements rql.FoldHandler<void> {
   num(x: rql.Num) { this.put(x.toString()); }
   str(x: rql.Str) { this.put(`"${x}"`); }
   date(x: rql.Date) { this.put(`"${dateToString(x)}"`); }
+  list(x: rql.List) {
+    if (x.length === 0) {
+      this.put("[ ]");
+    } else {
+      this.put("[").nl().indentMore();
+      let first = true;
+      x.forEach(value => {
+        if (!first) this.put(",").nl();
+        this.putIndent().putValue(value)
+        first = false;
+      });
+      this.indentLess().nl().putIndent().put("]");
+    }
+  }
   obj(x: rql.Obj) {
     const fields = Object.entries(x.obj);
     if (fields.length === 0) {
       this.put("{ }");
     } else {
       this.put("{").nl().indentMore();
+      let first = true;
       fields.forEach(([key, value]) => {
-        this.putIndent().put(`"${key}"`).put(": ").putValue(value).put(",").nl();
+        if (!first) this.put(",").nl();
+        this.putIndent().put(`"${key}"`).put(": ").putValue(value);
+        first = false;
       });
-      this.indentLess().putIndent().put("}");
+      this.indentLess().nl().putIndent().put("}");
     }
   }
+  blob(x: rql.Blob) {
+    this.put(`"${x.blob}"`)
+  }
+}
+
+function listToString(value: rql.List): string {
+  const printer = new RqlJsonPrinter()
+  printer.list(value)
+  return printer.getResult();
 }
 
 function objectToString(value: rql.Obj): string {
   const printer = new RqlJsonPrinter()
   printer.obj(value)
+  return printer.getResult();
+}
+
+function objectToJsonString(value: rql.Obj): string {
+  const printer = new RqlJsonPrinter()
+  printer.obj(value)
+  return printer.getResult();
+}
+
+function blobToString(value: rql.Blob): string {
+  const printer = new RqlJsonPrinter()
+  printer.blob(value)
   return printer.getResult();
 }
 
@@ -220,7 +272,9 @@ const rqlStringFolder: rql.FoldHandler<string> = {
   num: x => x.toString(),
   str: x => x,
   date: x => dateToString(x),
+  list: x => listToString(x),
   obj: x => objectToString(x),
+  blob: x => blobToString(x),
 };
 
 function valueToString(value: rql.Value): string {
@@ -233,16 +287,47 @@ const rqlElementFolder: rql.FoldHandler<React.ReactElement> = {
   num: x => <NumberValue>{x}</NumberValue>,
   str: x => <TextValue>{x}</TextValue>,
   date: x => <NumberValue>{dateToString(x)}</NumberValue>,
-  obj: x => <RQLObject obj={x} />
+  list: x => <RQLList list={x} />,
+  obj: x => <RQLObject obj={x} />,
+  blob: x => <RQLBlob blob={x} />,
 };
 
 function renderRqlValue(value: rql.Value) {
   return rql.fold_value(rqlElementFolder)(value);
 }
 
+type RQLListProps = {
+  list: rql.List
+};
+
+function RQLList(props: RQLListProps) {
+  const { list } = props;
+  const [isOpen, setOpen] = useState(true);
+  if (list.length > 0) {
+    return (<>
+      <RQLObjectOpenParen onClick={() => setOpen(!isOpen)}>{"["}</RQLObjectOpenParen>
+      {isOpen ? (
+        list.map(value => {
+            return (
+            <RQLField>
+              {renderRqlValue(value)}
+            </RQLField>
+            );
+          })
+        ) : (
+          <RQLSpecial>...</RQLSpecial>
+        )
+      }
+      <RQLSpecial>{"]"}</RQLSpecial>
+    </>);
+  } else {
+    return <RQLSpecial>{"[ ]"}</RQLSpecial>;
+  }
+}
+
 type RQLObjectProps = {
   obj: rql.Obj
-}
+};
 
 function RQLObject(props: RQLObjectProps) {
   const { obj } = props;
@@ -250,7 +335,7 @@ function RQLObject(props: RQLObjectProps) {
   const fields = Object.entries(obj.obj);
   if (fields.length > 0) {
     return (<>
-      <RQLObjectOpenParen onClick={() => setOpen(!isOpen)}>{isOpen ? "-" : "+"}{" {"}</RQLObjectOpenParen>
+      <RQLObjectOpenParen onClick={() => setOpen(!isOpen)}>{"{"}</RQLObjectOpenParen>
       {isOpen ? (
         fields.map(([key, value]) => {
             return (
@@ -270,8 +355,68 @@ function RQLObject(props: RQLObjectProps) {
   }
 }
 
+function blobToBase64String(blob: rql.Blob, cappedLength: number = 0): string {
+  return (cappedLength <= 0) ? blob.blob : blob.blob.substring(0, cappedLength);
+}
+
+function blobToHexString(blob: rql.Blob, cappedLength: number = 0): string {
+  const lookup = ["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"];
+  const enc = new TextEncoder();
+  const bytes = enc.encode(atob(blob.blob));
+  let str = "";
+  (cappedLength <= 0 ? bytes : bytes.subarray(0, cappedLength)).forEach(byte => {
+      const hex1 = byte & 0xf;
+      const hex2 = (byte >> 4) & 0xf;
+      str += lookup[hex1];
+      str += lookup[hex2];
+  });
+  return str;
+}
+
+function blobToJsonString(blob: rql.Blob): string {
+  const enc = new TextEncoder();
+  const bytes = enc.encode(atob(blob.blob));
+  let str = "[";
+  if (bytes.length > 0) {
+    str += bytes[0];
+    for (let i = 1; i < bytes.length; i++) {
+        str += ","
+        str += bytes[i];
+    }
+  }
+  return str + "]";
+}
+
+type RQLBlobProps = {
+  blob: rql.Blob;
+};
+
+function RQLBlob(props: RQLBlobProps) {
+  const { blob } = props;
+  const [isOpen, setOpen] = useState(false);
+
+  const cappedLength = 16;
+  const str = useMemo(() => {
+    return blobToHexString(blob, isOpen ? 0 : cappedLength);
+  }, [blob.blob]);
+
+  if (str.length > 0) {
+    return (<>
+      <RQLObjectOpenParen onClick={() => setOpen(!isOpen)}>[</RQLObjectOpenParen>
+      <RQLSpecial>0x{str}{!isOpen && str.length > cappedLength && "..."}</RQLSpecial>
+      <RQLSpecial>]</RQLSpecial>
+    </>);
+  } else {
+    return <RQLSpecial>[ ]</RQLSpecial>;
+  }
+}
+
 const RQLObjectOpenParen = styled.button`
-  margin-left: -8px;
+  font-size: 16px;
+  /*margin-left: -8px;*/
+  text-align: right;
+  width: 16px;
+  white-space: nowrap;
   padding: 2px;
   color: #005050;
 `;
@@ -295,17 +440,75 @@ function renderValue(value: rql.Value) {
   else if (typeof value === "number") return <NumberValue>{value}</NumberValue>;
   else if (typeof value === "string") return <TextValue>{value}</TextValue>;
   else if (rql.is_date(value)) return <NumberValue>{dateToString(value)}</NumberValue>;
+  else if (Array.isArray(value)) return <LargeValue><RQLList list={value} /></LargeValue>;
   else if (rql.is_object(value)) return <LargeValue><RQLObject obj={value} /></LargeValue>;
+  else if (rql.is_blob(value)) return <RQLBlob blob={value} />;
   else if (typeof value === "object") return <LargeValue>{"{...}"}</LargeValue>;
+}
+
+function copyToClipBoard(x: string) {
+  navigator.clipboard.writeText(x);
 }
 
 function copyValueToClipBoard(value: rql.Value) {
   const str = valueToString(value);
-  navigator.clipboard.writeText(str);
+  copyToClipBoard(str);
+}
+
+function unixSeconds(date: rql.Date): number {
+  return Math.trunc(new Date(date.date).getTime() / 1000);
+}
+function unixMillis(date: rql.Date): number {
+  return new Date(date.date).getTime();
 }
 
 const ResultTable = React.memo(function ResultTable(props: ResultTableProps) {
   const { columns, rows } = props;
+  const [copyCell, setCopyCell] = useState<[number, number] | null>(null);
+  const copySelectRef = useRef<HTMLDivElement | null>(null);
+
+  useNotifyClickOutside(copySelectRef, () => setCopyCell(null));
+
+  const copyIcon = (row: number, column: number, value: rql.Value) => {
+    if (copyCell !== null && copyCell[0] === row && copyCell[1] === column) {
+      switch (rql.type_of(value)) {
+        case rql.ValueType.Date:
+          return <CopySelect ref={copySelectRef}>
+            <CopyOption onClick={() => { setCopyCell(null); copyValueToClipBoard(value); }}>ISO</CopyOption>
+            <CopyOption onClick={() => { setCopyCell(null); copyToClipBoard(unixSeconds(value as rql.Date).toString()); }}>Unix s</CopyOption>
+            <CopyOption onClick={() => { setCopyCell(null); copyToClipBoard(unixMillis(value as rql.Date).toString()); }}>Unix ms</CopyOption>
+          </CopySelect>;
+        case rql.ValueType.List:
+          return <CopySelect ref={copySelectRef}>
+            <CopyOption onClick={() => { setCopyCell(null); copyValueToClipBoard(value); }}>JSON</CopyOption>
+          </CopySelect>;
+        case rql.ValueType.Obj:
+          return <CopySelect ref={copySelectRef}>
+            <CopyOption onClick={() => { setCopyCell(null); copyToClipBoard(objectToJsonString(value as rql.Obj)); }}>JSON</CopyOption>
+          </CopySelect>;
+        case rql.ValueType.Blob:
+          return <CopySelect ref={copySelectRef}>
+             <CopyOption onClick={() => { setCopyCell(null); copyToClipBoard(blobToBase64String(value as rql.Blob)); }}>base64</CopyOption>
+            <CopyOption onClick={() => { setCopyCell(null); copyToClipBoard(blobToHexString(value as rql.Blob)); }}>hex</CopyOption>
+            <CopyOption onClick={() => { setCopyCell(null); copyToClipBoard(blobToJsonString(value as rql.Blob)); }}>JSON</CopyOption>
+          </CopySelect>;
+      }
+    } else {
+      switch (rql.type_of(value)) {
+        case rql.ValueType.Null:
+        case rql.ValueType.Bool:
+        case rql.ValueType.Num:
+        case rql.ValueType.Str:
+          return <CopyIcon onClick={() => copyValueToClipBoard(value)}>⧉</CopyIcon>;
+        case rql.ValueType.Date:
+        case rql.ValueType.List:
+        case rql.ValueType.Obj:
+        case rql.ValueType.Blob:
+          return <CopyIcon onClick={() => setCopyCell([row, column])}>⧉</CopyIcon>;
+      }
+    }
+  };
+
   return (
     <Table>
       <thead>
@@ -328,7 +531,7 @@ const ResultTable = React.memo(function ResultTable(props: ResultTableProps) {
               {columns.map((value, i) => (
                 <Cell key={"col-" + i} numeric={typeof value === "number"}>
                   <CopyIconContainer>
-                    <CopyIcon onClick={() => copyValueToClipBoard(value)}>⧉</CopyIcon>
+                    {copyIcon(num, i, value)}
                   </CopyIconContainer>
                   {renderValue(value)}
                 </Cell>
@@ -521,12 +724,11 @@ const RowNumber = styled.td`
 const CopyIconContainer = styled.div`
   position: relative;
   float: right;
-  margin-right: 24px;
 `;
 
 const CopyIcon = styled.div`
   position: absolute;
-  /*float: right;*/
+  right: 0;
   padding: 2px;
   height: 24px;
   width: 20px;
@@ -538,6 +740,29 @@ const CopyIcon = styled.div`
   cursor: pointer;
   opacity: 0.0;
   transition: opacity linear 0.3s;
+`;
+
+const CopySelect = styled.div`
+  position: absolute;
+  right: 0;
+  display: flex;
+  flex-direction: row;
+  padding: 2px;
+  height: 28px;
+  font-size: 16px;
+  border: 1px solid black;
+  border-radius: 2px;
+  background: #e8e8ef;
+`;
+
+const CopyOption = styled.button`
+  padding: 2px;
+  font-size: 10px;
+  min-width: 32px;
+  line-height: 0.8;
+  border: 1px solid black;
+  border-radius: 2px;
+  background: #e8e8ef;
 `;
 
 const Cell = styled.td<{ numeric?: boolean }>`

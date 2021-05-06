@@ -7,10 +7,13 @@ export type { RqlNull as Null } from "./RqlValue";
 export type { RqlNum as Num } from "./RqlValue";
 export type { RqlDate as Date } from "./RqlValue";
 export type { RqlStr as Str } from "./RqlValue";
+export type { RqlList as List } from "./RqlValue";
 export type { RqlObj as Obj } from "./RqlValue";
+export type { RqlBlob as Blob } from "./RqlValue";
 
 export { is_date } from "./RqlValue";
 export { is_object } from "./RqlValue";
+export { is_blob } from "./RqlValue";
 export { type_of } from "./RqlValue";
 export { fold_value } from "./RqlValue";
 export type { FoldHandler } from "./RqlValue";
