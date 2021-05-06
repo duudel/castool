@@ -46,6 +46,6 @@ object CassandraSession {
 
   def query(q: String): RIO[CassandraSession, QueryResponse] = ZIO.accessM(_.get.query(q))
   def metadata: RIO[CassandraSession, Metadata] = ZIO.accessM(_.get.metadata)
-  
+
 }
 

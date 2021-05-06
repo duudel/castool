@@ -38,7 +38,41 @@ object ColumnValue {
 
   implicit val longEncoder: Encoder[Long] = (x: Long) => Json.fromString(x.toString)
 
-  implicit val decoder: Decoder[ColumnValue] = deriveDecoder
+  implicit val listEncoder: Encoder[Vector[Any]] = (m: Vector[Any]) => {
+    val mapped = m.map {
+      case b: Boolean => b.asJson
+      case s: String => s.asJson
+      case n: Int => n.asJson
+      case n: Double => n.asJson
+    }
+
+    Json.arr(mapped: _*)
+  }
+
+  implicit val setEncoder: Encoder[scala.collection.Set[Any]] = (m: scala.collection.Set[Any]) => {
+    val mapped = m.map {
+      case b: Boolean => b.asJson
+      case s: String => s.asJson
+      case n: Int => n.asJson
+      case n: Double => n.asJson
+    }
+
+    Json.arr(mapped.toSeq: _*)
+  }
+
+  implicit val mapEncoder: Encoder[scala.collection.Map[String, Any]] = (m: scala.collection.Map[String, Any]) => {
+    val mapped = m.mapValues {
+      case b: Boolean => b.asJson
+      case s: String => s.asJson
+      case n: Int => n.asJson
+      case n: Double => n.asJson
+    }
+
+    Json.obj(mapped.toVector: _*)
+  }
+
+  //implicit val decoder: Decoder[ColumnValue] = deriveDecoder
+  implicit val encoder: Encoder[ColumnValue] = deriveEncoder
 
   def fromValue[C <: ColumnValue, T](f: T => C)(v: T): ColumnValue =
     Option(v).map(f).getOrElse(Null)
@@ -97,24 +131,25 @@ object ColumnValue {
         }
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.LIST =>
         val list = row.getList[Any](index, classOf[Any])
+        // Cassandra does not make distinction between NULL and empty collection
         if (list == null) {
-          Null
+          List(Vector.empty)
         } else {
-          fromValue(List)(list.asScala.map(_.toString).toVector)
+          fromValue(List)(list.asScala.toVector)
         }
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.MAP =>
         val map = row.getMap[String, Any](index, classOf[String], classOf[Any])
         if (map == null) {
           Null
         } else {
-          fromValue(Map)(map.asScala.view.mapValues(_.toString).toMap)
+          fromValue(Map)(map.asScala.toMap)
         }
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SET =>
         val set = row.getSet[Any](index, classOf[Any])
         if (set == null) {
           Null
         } else {
-          fromValue(Set)(set.asScala.map(_.toString).toSet)
+          fromValue(Set)(set.asScala.toSet)
         }
       case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TUPLE =>
         val tuple = row.getTupleValue(index)
@@ -200,7 +235,6 @@ object ColumnValue {
 }
 
 object ColumnValues {
-
   case object Null extends ColumnValue
   case class Unknown(v: String) extends ColumnValue
 
@@ -224,9 +258,9 @@ object ColumnValues {
   case class Date(v: java.time.LocalDate) extends ColumnValue // ProtocolConstants.DataType.DATE
   case class Time(v: java.time.LocalTime) extends ColumnValue // ProtocolConstants.DataType.TIME
   case class Duration(v: String) extends ColumnValue // ProtocolConstants.DataType.DURATION
-  case class List(v: Vector[String]) extends ColumnValue // ProtocolConstants.DataType.LIST
-  case class Map(v: scala.collection.Map[String,String]) extends ColumnValue // ProtocolConstants.DataType.MAP
-  case class Set(v: scala.collection.Set[String]) extends ColumnValue // ProtocolConstants.DataType.SET
+  case class List(v: Vector[Any]) extends ColumnValue // ProtocolConstants.DataType.LIST
+  case class Map(v: scala.collection.Map[String,Any]) extends ColumnValue // ProtocolConstants.DataType.MAP
+  case class Set(v: scala.collection.Set[Any]) extends ColumnValue // ProtocolConstants.DataType.SET
   case class Tuple(v: String) extends ColumnValue // ProtocolConstants.DataType.TUPLE
   case class Udt(v: String) extends ColumnValue // ProtocolConstants.DataType.UDT
 }

@@ -10,6 +10,7 @@ object ValueType extends Enumeration {
   val Num: Value = Value
   val Date: Value = Value
   val Str: Value = Value
+  val List: Value = Value
   val Obj: Value = Value
   val Blob: Value = Value
 }
@@ -25,6 +26,7 @@ object ResolveValueType {
   implicit val imp_num: ValueTypeMapper[Num] = ValueTypeMapperImpl[Num](ValueType.Num)
   implicit val imp_date: ValueTypeMapper[Date] = ValueTypeMapperImpl[Date](ValueType.Date)
   implicit val imp_str: ValueTypeMapper[Str] = ValueTypeMapperImpl[Str](ValueType.Str)
+  implicit val imp_list: ValueTypeMapper[List] = ValueTypeMapperImpl[List](ValueType.List)
   implicit val imp_obj: ValueTypeMapper[Obj] = ValueTypeMapperImpl[Obj](ValueType.Obj)
   implicit val imp_blob: ValueTypeMapper[Blob] = ValueTypeMapperImpl[Blob](ValueType.Blob)
 
@@ -38,6 +40,7 @@ final case class Bool(v: Boolean) extends Value
 final case class Num(v: Double) extends Value
 final case class Date(v: java.time.Instant) extends Value
 final case class Str(v: String) extends Value
+final case class List(v: Vector[Value]) extends Value
 final case class Obj(v: Map[String, Value]) extends Value
 final case class Blob(v: Array[Byte]) extends Value
 

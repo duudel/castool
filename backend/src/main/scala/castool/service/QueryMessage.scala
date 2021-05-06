@@ -14,7 +14,7 @@ case class QueryMessageRows(rows: Seq[ResultRow]) extends QueryMessage
 case object QueryMessageFinished extends QueryMessage
 
 object QueryMessage {
-  implicit val decoder: Decoder[QueryMessage] = deriveDecoder
+  //implicit val decoder: Decoder[QueryMessage] = deriveDecoder
   implicit val encoder: Encoder[QueryMessage] = deriveEncoder
 }
 

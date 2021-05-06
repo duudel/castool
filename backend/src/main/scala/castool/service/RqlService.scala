@@ -54,7 +54,7 @@ object RqlService {
     case ColumnValue.DataType.TinyInt   => rql.ValueType.Num
     case ColumnValue.DataType.Uuid      => rql.ValueType.Str
     case ColumnValue.DataType.VarInt    => rql.ValueType.Num
-    case ColumnValue.DataType.List      => rql.ValueType.Str
+    case ColumnValue.DataType.List      => rql.ValueType.List
     case ColumnValue.DataType.Map       => rql.ValueType.Obj
     case ColumnValue.DataType.Set       => rql.ValueType.Str
     case ColumnValue.DataType.Tuple     => rql.ValueType.Str
@@ -83,8 +83,20 @@ object RqlService {
     case cassandra.ColumnValues.TinyInt(v)    => rql.Num(v)
     case cassandra.ColumnValues.Uuid(v)       => rql.Str(v.toString) // TODO: add UUID to rql
     case cassandra.ColumnValues.VarInt(v)     => rql.Num(v.bigInteger.doubleValue())
-    case cassandra.ColumnValues.List(v)       => rql.Str(v.mkString(",")) // TODO: add List to rql
-    case cassandra.ColumnValues.Map(v)        => rql.Obj(v.map(x => x._1 -> rql.Str(x._2)).toMap)
+    case cassandra.ColumnValues.List(v)       => rql.List(v.map {
+      case b: Boolean => rql.Bool(b)
+      case s: String => rql.Str(s)
+      case n: Int => rql.Num(n)
+      case n: Long => rql.Num(n)
+      case n: Double => rql.Num(n)
+    })
+    case cassandra.ColumnValues.Map(v)        => rql.Obj(v.mapValues {
+      case b: Boolean => rql.Bool(b)
+      case s: String => rql.Str(s)
+      case n: Int => rql.Num(n)
+      case n: Long => rql.Num(n)
+      case n: Double => rql.Num(n)
+    }.toMap)
     case cassandra.ColumnValues.Set(v)        => rql.Str(v.mkString(",")) // TODO: add set or use list
     case cassandra.ColumnValues.Tuple(v)      => rql.Str(v.mkString(",")) // TODO: what to do with tuples?
     case cassandra.ColumnValues.Udt(v)        => rql.Str(v) // TODO: what to do with UDTs?
@@ -138,7 +150,7 @@ object RqlService {
         .fromString(value)
         .getOrElse(rql.Str(value))
     }
-    def onArray(value: Vector[io.circe.Json]): rql.Value = rql.Null // TODO: add array type
+    def onArray(value: Vector[io.circe.Json]): rql.Value = rql.List(value.map(convertJsonToRql))
     def onObject(value: io.circe.JsonObject): rql.Value = jsonObjectToRql(value)
   }
   def convertJsonToRql(json: io.circe.Json): rql.Value = {
@@ -173,6 +185,7 @@ object RqlService {
     .addFunction(n"uuidToDate", Seq("uuid" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
     .addFunction(n"length", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
     .addFunction(n"length", Seq("blob" -> rql.ValueType.Blob), rql.Eval((blob: rql.Blob) => rql.Num(blob.v.length)))
+    .addFunction(n"length", Seq("list" -> rql.ValueType.List), rql.Eval((list: rql.List) => rql.Num(list.v.length)))
     .addFunction(n"bin", Seq("value" -> rql.ValueType.Num, "roundTo" -> rql.ValueType.Num), rql.Eval((value: rql.Num, roundTo: rql.Num) => rql.Num((value.v/roundTo.v).round * roundTo.v)))
     .addFunction(n"jsonToObject", ("value", rql.ValueType.Str) :: Nil, rql.Eval(jsonToObject))
     .addAggregation[rql.Num](n"count", Seq("x" -> rql.ValueType.Num), rql.Num(0), rql.Eval(() => rql.Num(1)), (x, num) => num)
