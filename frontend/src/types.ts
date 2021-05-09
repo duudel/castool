@@ -62,8 +62,32 @@ export enum ColumnValueDataTypeCode {
   Map = "Map",
 }
 
+const PrimitiveTypeCodes = {
+  Ascii: "Ascii",
+  BigInt: "BigInt",
+  Blob: "Blob",
+  Bool: "Bool",
+  Counter: "Counter",
+  Decimal: "Decimal",
+  Double: "Double",
+  Float: "Float",
+  Integer: "Integer",
+  SmallInt: "SmallInt",
+  TinyInt: "TinyInt",
+  Timestamp: "Timestamp",
+  Uuid: "Uuid",
+  VarInt: "VarInt",
+  TimeUuid: "TimeUuid",
+  Text: "Text",
+  Inet: "Inet",
+  Date: "Date",
+  Time: "Time",
+  Duration: "Duration",
+};
+
 interface PrimitiveType {
-  code: ColumnValueDataTypeCode;
+  //code: ColumnValueDataTypeCode;
+  code: keyof typeof PrimitiveTypeCodes;
 }
 interface ListType {
   code: ColumnValueDataTypeCode.List;
@@ -80,6 +104,19 @@ interface MapType {
 }
 
 export type ColumnValueDataType = PrimitiveType | ListType | SetType | MapType;
+
+export function dataTypeToString(dataType: ColumnValueDataType): string {
+  switch (dataType.code) {
+    case ColumnValueDataTypeCode.List:
+      return dataType.code + "<" + dataTypeToString(dataType.elem)  + ">";
+    case ColumnValueDataTypeCode.Set:
+      return dataType.code + "<" + dataTypeToString(dataType.elem)  + ">";
+    case ColumnValueDataTypeCode.Map:
+      return dataType.code + "<" + dataTypeToString(dataType.key) + "," + dataTypeToString(dataType.value)  + ">";
+    default:
+      return dataType.code;
+  }
+}
 
 export interface ColumnDefinition {
   name: string;

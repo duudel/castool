@@ -1,8 +1,8 @@
 import React from 'react';
 import styled from 'styled-components';
-import { Dispatch, useCallback, useEffect, useState } from "react";
+import { Dispatch, useCallback } from "react";
 
-import { ColumnDefinition, ColumnValue, ResultRow, ResultPage } from './types';
+import { ColumnDefinition, ColumnValue, ResultRow, ResultPage, dataTypeToString } from './types';
 import { Action, ActionType, State } from './reducer';
 
 import { JsonSyntaxHighlight } from './json-syntax/JsonSyntaxHighlight';
@@ -24,6 +24,14 @@ function columnValueToString(column: ColumnValue) {
     return column.SmallInt.v.toString();
   } else if (column.TinyInt !== undefined) {
     return column.TinyInt.v.toString();
+  } else if (column.Double !== undefined) {
+    return column.Double.v.toString();
+  } else if (column.Float !== undefined) {
+    return column.Float.v.toString();
+  } else if (column.Counter !== undefined) {
+    return column.Counter.v.toString();
+  } else if (column.Uuid !== undefined) {
+    return column.Uuid.v;
   } else if (column.TimeUuid !== undefined) {
     return column.TimeUuid.v;
   } else if (column.Text !== undefined) {
@@ -32,6 +40,18 @@ function columnValueToString(column: ColumnValue) {
     const s = atob(column.Blob.v);
     const json = JSON.parse(s);
     const pretty = JSON.stringify(json, null, 2);
+    return pretty;
+  } else if (column.List !== undefined) {
+    const value = column.List.v;
+    const pretty = JSON.stringify(value, null, 2);
+    return pretty;
+  } else if (column.Set !== undefined) {
+    const value = column.Set.v;
+    const pretty = JSON.stringify(value, null, 2);
+    return pretty;
+  } else if (column.Map !== undefined) {
+    const value = column.Map.v;
+    const pretty = JSON.stringify(value, null, 2);
     return pretty;
   } else {
     return JSON.stringify(column);
@@ -53,25 +73,41 @@ function renderColumnValue(column: ColumnValue, index: number) {
     return <IntegerValue>{column.SmallInt.v}</IntegerValue>;
   } else if (column.TinyInt !== undefined) {
     return <IntegerValue>{column.TinyInt.v}</IntegerValue>;
+  } else if (column.Double !== undefined) {
+    return <IntegerValue>{column.Double.v}</IntegerValue>;
+  } else if (column.Float !== undefined) {
+    return <IntegerValue>{column.Float.v}</IntegerValue>;
+  } else if (column.Counter !== undefined) {
+    return <IntegerValue>{column.Counter.v}</IntegerValue>;
   } else if (column.TimeUuid !== undefined) {
     return <IntegerValue>{column.TimeUuid.v}</IntegerValue>;
+  } else if (column.Uuid !== undefined) {
+    return <IntegerValue>{column.Uuid.v}</IntegerValue>;
   } else if (column.Text !== undefined) {
     return <TextValue>{column.Text.v}</TextValue>;
   } else if (column.Timestamp !== undefined) {
     return <TextValue>{column.Timestamp.v}</TextValue>;
   } else if (column.Blob !== undefined) {
-    console.log(column);
     const s = column.Blob.v; //atob(column.Blob.v);
-    if (true)
-      return <TextValue>{s}</TextValue>;
-      //return <LargeValue>{s}</LargeValue>;
-    else {
-      const json = JSON.parse(s);
-      const pretty = JSON.stringify(json, null, 2);
-      return <LargeValue>
-        <JsonSyntaxHighlight value={pretty} nopre={false} />
-      </LargeValue>;
-    }
+    return <TextValue>{s}</TextValue>;
+  } else if (column.List !== undefined) {
+    const value = column.List.v;
+    const pretty = JSON.stringify(value, null, 2);
+    return <>
+      <JsonSyntaxHighlight value={pretty} nopre={false} />
+    </>;
+  } else if (column.Set !== undefined) {
+    const value = column.Set.v;
+    const pretty = JSON.stringify(value, null, 2);
+    return <>
+      <JsonSyntaxHighlight value={pretty} nopre={false} />
+    </>;
+  } else if (column.Map !== undefined) {
+    const value = column.Map.v;
+    const pretty = JSON.stringify(value, null, 2);
+    return <>
+      <JsonSyntaxHighlight value={pretty} nopre={false} />
+    </>;
   } else {
     return <UnknownValue>{JSON.stringify(column)}</UnknownValue>;
   }
@@ -81,7 +117,7 @@ function renderColumnDef(def: ColumnDefinition, index: number) {
   const { name, dataType } = def;
   return (
     <HeadCell key={name}>
-      <ColumnName>{name}</ColumnName><ColumnDataType>: {dataType.code}</ColumnDataType>
+      <ColumnName>{name}</ColumnName><ColumnDataType>: {dataTypeToString(dataType)}</ColumnDataType>
     </HeadCell>
   );
 }

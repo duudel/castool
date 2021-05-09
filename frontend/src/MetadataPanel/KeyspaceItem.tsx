@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import styled from "styled-components";
 
 import { detailColor } from "../colors";
-import { Keyspace, Table } from "../types";
+import { Keyspace, Table, dataTypeToString } from "../types";
 import { TreeItem, TreeItemLine, TreeIcon, TreeItemIndent, TreeItemIndentBlank, TreeItemIndentLine, TreeItemTitle, TreeItemsContainer } from "./TreeItem";
 
 interface KeyspaceItemProps {
@@ -51,7 +51,7 @@ function KeyspaceItem(props: KeyspaceItemProps) {
     } else {
       return 0;
     }
-  }, [keyspace, isKeyspaceOpen]);
+  }, [keyspace, isKeyspaceOpen, calcHeightOfTable]);
 
   return (
     <TreeItem key={"keyspace-" + keyspace.name}>
@@ -84,7 +84,7 @@ function KeyspaceItem(props: KeyspaceItemProps) {
                       <TreeItemIndentLine />
                     </TreeItemIndent>
                     <TreeItemTitle>
-                      {columnDef.name}: <Detail>{columnDef.dataType.code}</Detail>
+                      {columnDef.name}: <Detail>{dataTypeToString(columnDef.dataType)}</Detail>
                     </TreeItemTitle>
                   </TreeItemLine>
                 </TreeItem>
