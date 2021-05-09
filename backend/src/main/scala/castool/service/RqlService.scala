@@ -56,9 +56,19 @@ object RqlService {
     case ColumnValue.DataType.VarInt    => rql.ValueType.Num
     case ColumnValue.DataType.List      => rql.ValueType.List
     case ColumnValue.DataType.Map       => rql.ValueType.Obj
-    case ColumnValue.DataType.Set       => rql.ValueType.Str
+    case ColumnValue.DataType.Set       => rql.ValueType.List
     case ColumnValue.DataType.Tuple     => rql.ValueType.Str
     case ColumnValue.DataType.Udt       => rql.ValueType.Str
+  }
+
+  def convertCollectionValue(x: Any): rql.Value = x match {
+    case b: Boolean => rql.Bool(b)
+    case s: String => rql.Str(s)
+    case n: Byte => rql.Num(n)
+    case n: Short => rql.Num(n)
+    case n: Int => rql.Num(n)
+    case n: Long => rql.Num(n)
+    case n: Double => rql.Num(n)
   }
 
   def convertValue(value: ColumnValue): rql.Value = value match {
@@ -83,30 +93,20 @@ object RqlService {
     case cassandra.ColumnValues.TinyInt(v)    => rql.Num(v)
     case cassandra.ColumnValues.Uuid(v)       => rql.Str(v.toString) // TODO: add UUID to rql
     case cassandra.ColumnValues.VarInt(v)     => rql.Num(v.bigInteger.doubleValue())
-    case cassandra.ColumnValues.List(v)       => rql.List(v.map {
-      case b: Boolean => rql.Bool(b)
-      case s: String => rql.Str(s)
-      case n: Int => rql.Num(n)
-      case n: Long => rql.Num(n)
-      case n: Double => rql.Num(n)
-    })
-    case cassandra.ColumnValues.Map(v)        => rql.Obj(v.mapValues {
-      case b: Boolean => rql.Bool(b)
-      case s: String => rql.Str(s)
-      case n: Int => rql.Num(n)
-      case n: Long => rql.Num(n)
-      case n: Double => rql.Num(n)
-    }.toMap)
-    case cassandra.ColumnValues.Set(v)        => rql.Str(v.mkString(",")) // TODO: add set or use list
+    case cassandra.ColumnValues.List(v)       => rql.List(v.map(convertCollectionValue))
+    case cassandra.ColumnValues.Map(v)        =>
+      rql.Obj(v.mapValues(convertCollectionValue).map {
+        case (k, v) => k.toString -> v
+      }.toMap)
+    case cassandra.ColumnValues.Set(v)        => rql.List(v.toVector.map(convertCollectionValue)) // TODO: add set data type?
     case cassandra.ColumnValues.Tuple(v)      => rql.Str(v.mkString(",")) // TODO: what to do with tuples?
     case cassandra.ColumnValues.Udt(v)        => rql.Str(v) // TODO: what to do with UDTs?
     case cassandra.ColumnValues.Unknown(v)    => rql.Str(v)
   }
 
-  def convertColumnDefsToSourceDef(columnDefs: Seq[(String, cassandra.ColumnDefinition)]): rql.SourceDef = {
-    val sourceDef = columnDefs.map {
-      case (columnName, definition) =>
-        Name.fromStringUnsafe(columnName) -> convertDataType(definition.dataType)
+  def convertColumnDefsToSourceDef(columnDefs: Seq[cassandra.ColumnDefinition]): rql.SourceDef = {
+    val sourceDef = columnDefs.map { definition =>
+      Name.fromStringUnsafe(definition.name) -> convertDataType(definition.dataType)
     }.toSeq
     rql.SourceDef(sourceDef)
   }
@@ -239,11 +239,11 @@ object RqlService {
             case None => None
             case Some((keyspace, tab)) =>
               val tableName = keyspace.name + "." + tab.name
-              val q = s"SELECT ${tab.columnDefs.map(_._1).mkString(", ")} FROM $tableName"
+              val q = s"SELECT ${tab.columnDefs.map(_.name).mkString(", ")} FROM $tableName"
               val effect = for {
                 queryResult <- casSession.query(q)
               } yield {
-                val sourceDef = convertColumnDefsToSourceDef(queryResult.columnDefs.map(c => c.name -> c))
+                val sourceDef = convertColumnDefsToSourceDef(queryResult.columnDefs)
                 queryResult.rowsStream.map { resultRow =>
                   val values = sourceDef.columns
                     .zip(resultRow.columnValues)

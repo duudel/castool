@@ -54,21 +54,23 @@ object ColumnValue {
       case b: Boolean => b.asJson
       case s: String => s.asJson
       case n: Int => n.asJson
+      case n: Long => n.asJson
       case n: Double => n.asJson
     }
 
     Json.arr(mapped.toSeq: _*)
   }
 
-  implicit val mapEncoder: Encoder[scala.collection.Map[String, Any]] = (m: scala.collection.Map[String, Any]) => {
+  implicit val mapEncoder: Encoder[scala.collection.Map[Any, Any]] = (m: scala.collection.Map[Any, Any]) => {
     val mapped = m.mapValues {
       case b: Boolean => b.asJson
       case s: String => s.asJson
       case n: Int => n.asJson
+      case n: Long => n.asJson
       case n: Double => n.asJson
     }
 
-    Json.obj(mapped.toVector: _*)
+    Json.obj(mapped.map { case (k, v) => k.toString -> v }.toVector: _*)
   }
 
   //implicit val decoder: Decoder[ColumnValue] = deriveDecoder
@@ -78,87 +80,108 @@ object ColumnValue {
     Option(v).map(f).getOrElse(Null)
 
   def fromColumnDefinitionAndRow(columnDef: cql.ColumnDefinition, row: cql.Row, index: Int): ColumnValue = {
+    import com.datastax.oss.protocol.internal.ProtocolConstants
+
+    def convertGeneric[R](protocolCode: Int)(convertX: Class[_] => R) = {
+      protocolCode match {
+        case ProtocolConstants.DataType.ASCII | ProtocolConstants.DataType.VARCHAR => convertX(classOf[String])
+        case ProtocolConstants.DataType.BOOLEAN => convertX(classOf[Boolean])
+        case ProtocolConstants.DataType.INT => convertX(classOf[java.lang.Integer])
+        case ProtocolConstants.DataType.SMALLINT => convertX(classOf[java.lang.Short])
+        case ProtocolConstants.DataType.TINYINT => convertX(classOf[java.lang.Byte])
+        case ProtocolConstants.DataType.BIGINT => convertX(classOf[java.lang.Long])
+        case ProtocolConstants.DataType.TIMESTAMP => convertX(classOf[java.time.Instant])
+        case ProtocolConstants.DataType.UUID => convertX(classOf[java.util.UUID])
+        case ProtocolConstants.DataType.VARINT => convertX(classOf[java.math.BigInteger])
+        case ProtocolConstants.DataType.TIMEUUID => convertX(classOf[java.util.UUID])
+        case ProtocolConstants.DataType.INET => convertX(classOf[java.net.InetAddress])
+        case ProtocolConstants.DataType.DATE => convertX(classOf[java.time.LocalDate])
+        case ProtocolConstants.DataType.TIME => convertX(classOf[java.time.LocalTime])
+        //case ProtocolConstants.DataType.DURATION =>
+      }
+    }
+
     columnDef.getType().getProtocolCode() match {
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.ASCII =>
-        fromValue(Ascii)(row.getString(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BIGINT =>
-        fromValue(BigInt)(row.get(index, classOf[Long]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BLOB =>
+      case ProtocolConstants.DataType.ASCII => fromValue(Ascii)(row.getString(index))
+      case ProtocolConstants.DataType.BIGINT => fromValue(BigInt)(row.get(index, classOf[Long]))
+      case ProtocolConstants.DataType.BLOB =>
         val buf = row.getByteBuffer(index)
         if (buf == null) {
           Null
         } else {
           Blob(buf.array())
         }
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BOOLEAN =>
-        fromValue(Bool)(row.get(index, classOf[Boolean]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.COUNTER =>
-        fromValue(Counter)(row.get(index, classOf[Long]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DECIMAL =>
-        fromValue(Decimal)(row.getBigDecimal(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DOUBLE =>
-        fromValue(Double)(row.get(index, classOf[scala.Double]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.FLOAT =>
-        fromValue(Float)(row.get(index, classOf[scala.Float]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INT =>
-        fromValue(Integer)(row.get(index, classOf[Int]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SMALLINT =>
-        fromValue(SmallInt)(row.get(index, classOf[Short]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TINYINT =>
-        fromValue(TinyInt)(row.get(index, classOf[Byte]))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIMESTAMP =>
-        fromValue(Timestamp)(row.getInstant(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.UUID =>
-        fromValue(Uuid)(row.getUuid(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.VARINT =>
-        fromValue(VarInt)(row.getBigInteger(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIMEUUID =>
-        fromValue(TimeUuid)(row.getUuid(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.VARCHAR =>
-        fromValue(Text)(row.getString(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INET =>
-        fromValue(Inet)(row.getInetAddress(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DATE =>
-        fromValue(Date)(row.getLocalDate(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIME =>
-        fromValue(Time)(row.getLocalTime(index))
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DURATION =>
+      case ProtocolConstants.DataType.BOOLEAN => fromValue(Bool)(row.get(index, classOf[Boolean]))
+      case ProtocolConstants.DataType.COUNTER => fromValue(Counter)(row.get(index, classOf[Long]))
+      case ProtocolConstants.DataType.DECIMAL => fromValue(Decimal)(row.getBigDecimal(index))
+      case ProtocolConstants.DataType.DOUBLE => fromValue(Double)(row.get(index, classOf[scala.Double]))
+      case ProtocolConstants.DataType.FLOAT => fromValue(Float)(row.get(index, classOf[scala.Float]))
+      case ProtocolConstants.DataType.INT => fromValue(Integer)(row.get(index, classOf[Int]))
+      case ProtocolConstants.DataType.SMALLINT => fromValue(SmallInt)(row.get(index, classOf[Short]))
+      case ProtocolConstants.DataType.TINYINT => fromValue(TinyInt)(row.get(index, classOf[Byte]))
+      case ProtocolConstants.DataType.TIMESTAMP => fromValue(Timestamp)(row.getInstant(index))
+      case ProtocolConstants.DataType.UUID => fromValue(Uuid)(row.getUuid(index))
+      case ProtocolConstants.DataType.VARINT => fromValue(VarInt)(row.getBigInteger(index))
+      case ProtocolConstants.DataType.TIMEUUID => fromValue(TimeUuid)(row.getUuid(index))
+      case ProtocolConstants.DataType.VARCHAR => fromValue(Text)(row.getString(index))
+      case ProtocolConstants.DataType.INET => fromValue(Inet)(row.getInetAddress(index))
+      case ProtocolConstants.DataType.DATE => fromValue(Date)(row.getLocalDate(index))
+      case ProtocolConstants.DataType.TIME => fromValue(Time)(row.getLocalTime(index))
+      case ProtocolConstants.DataType.DURATION =>
         val dur = row.getCqlDuration(index)
         if (dur == null) {
           Null
         } else {
           fromValue(Duration)(dur.toString())
         }
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.LIST =>
-        val list = row.getList[Any](index, classOf[Any])
-        // Cassandra does not make distinction between NULL and empty collection
-        if (list == null) {
-          List(Vector.empty)
-        } else {
-          fromValue(List)(list.asScala.toVector)
-        }
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.MAP =>
-        val map = row.getMap[String, Any](index, classOf[String], classOf[Any])
-        if (map == null) {
+      case ProtocolConstants.DataType.LIST =>
+        if (row.isNull(index)) {
           Null
         } else {
-          fromValue(Map)(map.asScala.toMap)
+          val listType = columnDef.getType().asInstanceOf[com.datastax.oss.driver.api.core.`type`.ListType]
+          convertGeneric(listType.getElementType().getProtocolCode()) { elemClass =>
+            val list = row.getList(index, elemClass)
+            if (list == null) {
+              List(Vector.empty)
+            } else {
+              fromValue(List)(list.asScala.toVector)
+            }
+          }
         }
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SET =>
-        val set = row.getSet[Any](index, classOf[Any])
-        if (set == null) {
+      case ProtocolConstants.DataType.MAP =>
+        if (row.isNull(index)) {
           Null
         } else {
-          fromValue(Set)(set.asScala.toSet)
+          val mapType = columnDef.getType().asInstanceOf[com.datastax.oss.driver.api.core.`type`.MapType]
+          convertGeneric(mapType.getKeyType().getProtocolCode()) { keyClass =>
+            convertGeneric(mapType.getValueType().getProtocolCode()) { valueClass =>
+              val map = row.getMap(index, keyClass, valueClass)
+              if (map == null) Map(scala.collection.Map.empty) else Map(map.asScala.toMap)
+            }
+          }
         }
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TUPLE =>
+      case ProtocolConstants.DataType.SET =>
+        if (row.isNull(index)) {
+          Null
+        } else {
+          val setType = columnDef.getType().asInstanceOf[com.datastax.oss.driver.api.core.`type`.SetType]
+          convertGeneric(setType.getElementType().getProtocolCode()) { elemClass =>
+            val set = row.getSet(index, elemClass)
+            if (set == null) {
+              Set(scala.collection.Set.empty)
+            } else {
+              fromValue(Set)(set.asScala.toSet)
+            }
+          }
+        }
+      case ProtocolConstants.DataType.TUPLE =>
         val tuple = row.getTupleValue(index)
         if (tuple == null) {
           Null
         } else {
           fromValue(Tuple)(tuple.getFormattedContents)
         }
-      case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.UDT =>
+      case ProtocolConstants.DataType.UDT =>
         val value = row.getUdtValue(index)
         if (value == null) {
           Null
@@ -202,32 +225,34 @@ object ColumnValue {
     implicit val decoder: Decoder[DataType] = Decoder.enumDecoder(DataType)
 
     def fromCas(dt: CasDataType): DataType = {
+      import com.datastax.oss.protocol.internal.ProtocolConstants
+
       dt.getProtocolCode() match {
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.ASCII => Ascii
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BIGINT => BigInt
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BLOB => Blob
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.BOOLEAN => Bool
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.COUNTER => Counter
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DECIMAL => Decimal
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DOUBLE => Double
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.FLOAT => Float
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INT => Integer
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SMALLINT => SmallInt
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TINYINT => TinyInt
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIMESTAMP => Timestamp
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.UUID => Uuid
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.VARINT => VarInt
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIMEUUID => TimeUuid
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.VARCHAR => Text
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.INET => Inet
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DATE => Date
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TIME => Time
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.DURATION => Duration
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.LIST => List
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.MAP => Map
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.SET => Set
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.TUPLE => Tuple
-        case com.datastax.oss.protocol.internal.ProtocolConstants.DataType.UDT => Udt
+        case ProtocolConstants.DataType.ASCII => Ascii
+        case ProtocolConstants.DataType.BIGINT => BigInt
+        case ProtocolConstants.DataType.BLOB => Blob
+        case ProtocolConstants.DataType.BOOLEAN => Bool
+        case ProtocolConstants.DataType.COUNTER => Counter
+        case ProtocolConstants.DataType.DECIMAL => Decimal
+        case ProtocolConstants.DataType.DOUBLE => Double
+        case ProtocolConstants.DataType.FLOAT => Float
+        case ProtocolConstants.DataType.INT => Integer
+        case ProtocolConstants.DataType.SMALLINT => SmallInt
+        case ProtocolConstants.DataType.TINYINT => TinyInt
+        case ProtocolConstants.DataType.TIMESTAMP => Timestamp
+        case ProtocolConstants.DataType.UUID => Uuid
+        case ProtocolConstants.DataType.VARINT => VarInt
+        case ProtocolConstants.DataType.TIMEUUID => TimeUuid
+        case ProtocolConstants.DataType.VARCHAR => Text
+        case ProtocolConstants.DataType.INET => Inet
+        case ProtocolConstants.DataType.DATE => Date
+        case ProtocolConstants.DataType.TIME => Time
+        case ProtocolConstants.DataType.DURATION => Duration
+        case ProtocolConstants.DataType.LIST => List
+        case ProtocolConstants.DataType.MAP => Map
+        case ProtocolConstants.DataType.SET => Set
+        case ProtocolConstants.DataType.TUPLE => Tuple
+        case ProtocolConstants.DataType.UDT => Udt
       }
     }
   }
@@ -259,7 +284,7 @@ object ColumnValues {
   case class Time(v: java.time.LocalTime) extends ColumnValue // ProtocolConstants.DataType.TIME
   case class Duration(v: String) extends ColumnValue // ProtocolConstants.DataType.DURATION
   case class List(v: Vector[Any]) extends ColumnValue // ProtocolConstants.DataType.LIST
-  case class Map(v: scala.collection.Map[String,Any]) extends ColumnValue // ProtocolConstants.DataType.MAP
+  case class Map(v: scala.collection.Map[Any, Any]) extends ColumnValue // ProtocolConstants.DataType.MAP
   case class Set(v: scala.collection.Set[Any]) extends ColumnValue // ProtocolConstants.DataType.SET
   case class Tuple(v: String) extends ColumnValue // ProtocolConstants.DataType.TUPLE
   case class Udt(v: String) extends ColumnValue // ProtocolConstants.DataType.UDT

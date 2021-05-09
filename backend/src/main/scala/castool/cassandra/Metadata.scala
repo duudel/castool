@@ -64,9 +64,9 @@ object Keyspace {
 case class Table(
   id: Option[UUID],
   name: String,
-  columnDefs: Seq[(String, ColumnDefinition)],
+  columnDefs: Seq[ColumnDefinition],
   partitionKey: Seq[String],
-  clusteringColumns: Map[String, ClusteringOrder.Value]
+  clusteringColumns: Seq[(String, ClusteringOrder.Value)]
 )
 
 object Table {
@@ -75,10 +75,10 @@ object Table {
   def fromDriverTable(t: driver.api.core.metadata.schema.TableMetadata): Table = {
     val columnDefs = t.getColumns().asScala.map { case (name, column) =>
       val nameString = name.asCql(true)
-      nameString -> ColumnDefinition(name = nameString, ColumnValue.DataType.fromCas(column.getType()))
+      ColumnDefinition(name = nameString, ColumnValue.DataType.fromCas(column.getType()))
     }
     val partitionKey = t.getPartitionKey().asScala.map(_.getName().asCql(true))
-    val clusteringColumns = t.getClusteringColumns().asScala.map {
+    val clusteringColumns = t.getClusteringColumns().asScala.toSeq.map {
       case (cm, driver.api.core.metadata.schema.ClusteringOrder.ASC) =>
         cm.getName().asCql(true) -> ClusteringOrder.ASC
       case (cm, driver.api.core.metadata.schema.ClusteringOrder.DESC) =>
@@ -89,7 +89,7 @@ object Table {
       name = t.getName().asCql(true),
       columnDefs = columnDefs.toSeq,
       partitionKey = partitionKey.toSeq,
-      clusteringColumns = clusteringColumns.toMap[String, ClusteringOrder.Value],
+      clusteringColumns = clusteringColumns
     )
   }
 }
