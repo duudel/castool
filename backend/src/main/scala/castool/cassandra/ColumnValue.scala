@@ -15,6 +15,7 @@ import java.net.InetAddress
 
 import scala.util.Try
 import scala.jdk.CollectionConverters._
+import java.util.Base64
 
 sealed trait ColumnValue
 
@@ -59,6 +60,11 @@ object ColumnValue {
     }
 
     Json.arr(mapped.toSeq: _*)
+  }
+  
+  implicit val blobEncoder: Encoder[Blob] = (blob: Blob) => {
+    val s = Base64.getEncoder.encodeToString(blob.v)
+    Json.obj("v" -> s.asJson)
   }
 
   implicit val mapEncoder: Encoder[scala.collection.Map[Any, Any]] = (m: scala.collection.Map[Any, Any]) => {
@@ -194,7 +200,71 @@ object ColumnValue {
     }
   }
 
-  object DataType extends Enumeration {
+  sealed trait DataType { def code: DataTypeCode }
+  final case class PrimitiveType(code: DataTypeCode) extends DataType
+  final case class ListType(elem: DataType) extends DataType {
+    val code: DataTypeCode = DataTypeCode.List
+  }
+  final case class SetType(elem: DataType) extends DataType {
+    val code: DataTypeCode = DataTypeCode.Set
+  }
+  final case class MapType(key: DataType, value: DataType) extends DataType {
+    val code: DataTypeCode = DataTypeCode.Map
+  }
+
+  object DataType {
+    def fromCas(dt: CasDataType): DataType = {
+      import com.datastax.oss.protocol.internal.ProtocolConstants
+      import DataTypeCode._
+
+      dt.getProtocolCode() match {
+        case ProtocolConstants.DataType.ASCII => PrimitiveType(Ascii)
+        case ProtocolConstants.DataType.BIGINT => PrimitiveType(BigInt)
+        case ProtocolConstants.DataType.BLOB => PrimitiveType(Blob)
+        case ProtocolConstants.DataType.BOOLEAN => PrimitiveType(Bool)
+        case ProtocolConstants.DataType.COUNTER => PrimitiveType(Counter)
+        case ProtocolConstants.DataType.DECIMAL => PrimitiveType(Decimal)
+        case ProtocolConstants.DataType.DOUBLE => PrimitiveType(Double)
+        case ProtocolConstants.DataType.FLOAT => PrimitiveType(Float)
+        case ProtocolConstants.DataType.INT => PrimitiveType(Integer)
+        case ProtocolConstants.DataType.SMALLINT => PrimitiveType(SmallInt)
+        case ProtocolConstants.DataType.TINYINT => PrimitiveType(TinyInt)
+        case ProtocolConstants.DataType.TIMESTAMP => PrimitiveType(Timestamp)
+        case ProtocolConstants.DataType.UUID => PrimitiveType(Uuid)
+        case ProtocolConstants.DataType.VARINT => PrimitiveType(VarInt)
+        case ProtocolConstants.DataType.TIMEUUID => PrimitiveType(TimeUuid)
+        case ProtocolConstants.DataType.VARCHAR => PrimitiveType(Text)
+        case ProtocolConstants.DataType.INET => PrimitiveType(Inet)
+        case ProtocolConstants.DataType.DATE => PrimitiveType(Date)
+        case ProtocolConstants.DataType.TIME => PrimitiveType(Time)
+        case ProtocolConstants.DataType.DURATION => PrimitiveType(Duration)
+        case ProtocolConstants.DataType.LIST =>
+          val listType = dt.asInstanceOf[com.datastax.oss.driver.api.core.`type`.ListType]
+          val elemType = DataType.fromCas(listType.getElementType())
+          ListType(elemType)
+        case ProtocolConstants.DataType.MAP =>
+          val mapType = dt.asInstanceOf[com.datastax.oss.driver.api.core.`type`.MapType]
+          val keyType = DataType.fromCas(mapType.getKeyType())
+          val valueType = DataType.fromCas(mapType.getValueType())
+          MapType(keyType, valueType)
+        case ProtocolConstants.DataType.SET =>
+          val setType = dt.asInstanceOf[com.datastax.oss.driver.api.core.`type`.SetType]
+          val elemType = DataType.fromCas(setType.getElementType())
+          SetType(elemType)
+        case ProtocolConstants.DataType.TUPLE => PrimitiveType(Tuple)
+        case ProtocolConstants.DataType.UDT => PrimitiveType(Udt)
+      }
+    }
+
+    implicit val encoder: Encoder[DataType] = (dt: DataType) => dt match {
+      case PrimitiveType(code) => Json.obj("code" -> code.asJson)
+      case ListType(elem) => Json.obj("code" -> dt.code.asJson, "elem" -> elem.asJson)
+      case SetType(elem) => Json.obj("code" -> dt.code.asJson, "elem" -> elem.asJson)
+      case MapType(key, value) => Json.obj("code" -> dt.code.asJson, "key" -> key.asJson, "value" -> value.asJson)
+    }
+  }
+
+  object DataTypeCode extends Enumeration {
     val Ascii = Value
     val BigInt = Value
     val Blob = Value
@@ -221,10 +291,10 @@ object ColumnValue {
     val Tuple = Value
     val Udt = Value
 
-    implicit val encoder: Encoder[DataType] = Encoder.enumEncoder(DataType)
-    implicit val decoder: Decoder[DataType] = Decoder.enumDecoder(DataType)
+    implicit val encoder: Encoder[DataTypeCode] = Encoder.enumEncoder(DataTypeCode)
+    implicit val decoder: Decoder[DataTypeCode] = Decoder.enumDecoder(DataTypeCode)
 
-    def fromCas(dt: CasDataType): DataType = {
+    def fromCas(dt: CasDataType): DataTypeCode = {
       import com.datastax.oss.protocol.internal.ProtocolConstants
 
       dt.getProtocolCode() match {
@@ -256,7 +326,7 @@ object ColumnValue {
       }
     }
   }
-  type DataType = DataType.Value
+  type DataTypeCode = DataTypeCode.Value
 }
 
 object ColumnValues {

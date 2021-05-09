@@ -36,7 +36,7 @@ export type ColumnValue = ColumnValue_Null
   | ColumnValue_Timestamp
   | any;
 
-export enum ColumnValueDataType {
+export enum ColumnValueDataTypeCode {
   Ascii = "Ascii",
   BigInt = "BigInt",
   Blob = "Blob",
@@ -57,7 +57,29 @@ export enum ColumnValueDataType {
   Date = "Date",
   Time = "Time",
   Duration = "Duration",
+  List = "List",
+  Set = "Set",
+  Map = "Map",
 }
+
+interface PrimitiveType {
+  code: ColumnValueDataTypeCode;
+}
+interface ListType {
+  code: ColumnValueDataTypeCode.List;
+  elem: ColumnValueDataType;
+}
+interface SetType {
+  code: ColumnValueDataTypeCode.Set;
+  elem: ColumnValueDataType;
+}
+interface MapType {
+  code: ColumnValueDataTypeCode.Map;
+  key: ColumnValueDataType;
+  value: ColumnValueDataType;
+}
+
+export type ColumnValueDataType = PrimitiveType | ListType | SetType | MapType;
 
 export interface ColumnDefinition {
   name: string;
@@ -71,5 +93,41 @@ export interface ResultRow {
 
 export interface ResultPage {
   rows: ResultRow[];
+}
+
+// Metadata
+
+export enum ClusterinOrder {
+  ASC = "ASC",
+  DESC = "DESC",
+}
+
+export interface Table {
+  id: string;
+  name: string;
+  columnDefs: ColumnDefinition[];
+  partitionKey: string[];
+  clusteringColumns: [string, ClusterinOrder][];
+}
+
+export interface Keyspace {
+  name: string;
+  replication: { class: string; replication_factor: string; };
+  tables: Table[];
+}
+
+export interface Node {
+  cassandraVersion: string;
+  datacenter: string;
+  endpoint: string;
+  hostId: string;
+  rack: string;
+  schemaVersion: string;
+}
+
+export interface Metadata {
+  clusterName: string;
+  keyspaces: Keyspace[];
+  nodes: Node[];
 }
 

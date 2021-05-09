@@ -10,10 +10,11 @@ import * as rxop from 'rxjs/operators';
 import { Action, State, clearTxResults, addTxResults, setTxSchema } from './reducer';
 
 import useSessionStorage from './utils/UseSessionStorageHook';
-import {ColumnValue, ColumnValueDataType, ResultRow} from './types';
+import { ColumnValueDataTypeCode, ResultRow } from './types';
+import type { ColumnValueDataType } from './types';
 
 import * as rql from './rql/rql';
-import {JsonSyntaxHighlight} from './json-syntax/JsonSyntaxHighlight';
+import { JsonSyntaxHighlight } from './json-syntax/JsonSyntaxHighlight';
 
 function rowsObservable(state: State): rql.RowsObs {
   function convertRow(row: ResultRow): any {
@@ -23,7 +24,7 @@ function rowsObservable(state: State): rql.RowsObs {
       if (columnValue.Null !== undefined) {
         result[columnDef.name] = null;
       } else {
-        result[columnDef.name] = columnValue[columnDef.dataType].v;
+        result[columnDef.name] = columnValue[columnDef.dataType.code].v;
       }
     });
     return result;
@@ -146,24 +147,24 @@ export function TransformerSection(props: TransformerSectionProps) {
 
   useEffect(() => {
     const convertDataType = (dt: ColumnValueDataType): rql.DataType => {
-      switch (dt) {
-        case ColumnValueDataType.Bool: return "boolean";
-        case ColumnValueDataType.Integer: return "number";
-        case ColumnValueDataType.SmallInt: return "number";
-        case ColumnValueDataType.TinyInt: return "number";
-        case ColumnValueDataType.Date: return "date";
-        case ColumnValueDataType.Timestamp: return "date";
+      switch (dt.code) {
+        case ColumnValueDataTypeCode.Bool: return "boolean";
+        case ColumnValueDataTypeCode.Integer: return "number";
+        case ColumnValueDataTypeCode.SmallInt: return "number";
+        case ColumnValueDataTypeCode.TinyInt: return "number";
+        case ColumnValueDataTypeCode.Date: return "date";
+        case ColumnValueDataTypeCode.Timestamp: return "date";
         default: return "string";
       }
     };
     const convertValue = (dt: ColumnValueDataType, v: any): rql.Value => {
-      switch (dt) {
+      switch (dt.code) {
         //case ColumnValueDataType.Bool: return "boolean";
         //case ColumnValueDataType.Integer: return "number";
         //case ColumnValueDataType.SmallInt: return "number";
         //case ColumnValueDataType.TinyInt: return "number";
-        case ColumnValueDataType.Date: return new Date(v);
-        case ColumnValueDataType.Timestamp: return new Date(v);
+        case ColumnValueDataTypeCode.Date: return new Date(v);
+        case ColumnValueDataTypeCode.Timestamp: return new Date(v);
         default: return v;
       }
     };

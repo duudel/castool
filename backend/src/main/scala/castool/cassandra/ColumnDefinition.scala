@@ -12,8 +12,8 @@ case class ColumnDefinition(
 )
 
 object ColumnDefinition {
-  implicit val codec = deriveCodec[ColumnDefinition]
-  //implicit val encoder: Encoder[ColumnDefinition] = deriveEncoder
+  //implicit val codec = deriveCodec[ColumnDefinition]
+  implicit val encoder: Encoder[ColumnDefinition] = deriveEncoder
 
   def fromDriverDef(defn: driver.api.core.cql.ColumnDefinition): ColumnDefinition = ColumnDefinition(
     name = defn.getName().asCql(true),

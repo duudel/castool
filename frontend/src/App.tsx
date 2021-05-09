@@ -5,6 +5,7 @@ import casLogo from "./logo/CasTool-2-icon.png";
 import "./App.css";
 
 import { useWebsocket } from './utils/UseWebsocketHook';
+import { useFetch } from './utils/UseFetch';
 import Split from './Split';
 import QuerySection from './QuerySection';
 import { TransformerSection } from './TransformerSection';
@@ -12,6 +13,9 @@ import { TransformerSection } from './TransformerSection';
 import { Action, ActionType, reducer, initialState, State, QueryStatus } from './reducer';
 
 import RqlQueryTab from './RqlQueryTab';
+import { Metadata } from "./types";
+import MetadataPanel from "./MetadataPanel";
+import { headerBackground } from "./colors";
 
 function renderTab(
   tab: number,
@@ -21,6 +25,7 @@ function renderTab(
   tref: React.RefObject<HTMLDivElement>,
   splitContainerRef: React.RefObject<HTMLDivElement>,
   sendQuery: (msg: any) => void,
+  metadata: { data: Metadata | null, loading: boolean, error: string | null },
 ) {
   switch (tab) {
     case 0:
@@ -38,9 +43,9 @@ function renderTab(
         </SplitContainer>
       );
     case 1:
-      return (
-        <RqlQueryTab />
-      );
+      return <RqlQueryTab />;
+    case 2:
+      return <MetadataPanel {...metadata} />
   }
 }
 
@@ -50,6 +55,12 @@ function App() {
     dispatch({ type: ActionType.ON_MESSAGE, message: message.data })
   }, []);
   const [sendQuery, wsStatus] = useWebsocket("ws://localhost:8080/squery", dispatchAction);
+  const metadata = useFetch<Metadata>({
+    method: "GET",
+    url: window.location.protocol + "//" + window.location.host + "/metadata",
+  });
+
+  console.log("Response ", metadata);
 
   const [tab, setTab] = useState(0);
 
@@ -70,9 +81,10 @@ function App() {
         <TabButtonStrip>
           <TabButton selected={tab === 0} onClick={() => setTab(0)}>CQL Query</TabButton>
           <TabButton selected={tab === 1} onClick={() => setTab(1)}>RQL Query</TabButton>
+          <TabButton selected={tab === 2} onClick={() => setTab(2)}>Metadata</TabButton>
         </TabButtonStrip>
       </Header>
-      {renderTab(tab, state, dispatch, qref, tref, splitContainerRef, sendQuery)}
+      {renderTab(tab, state, dispatch, qref, tref, splitContainerRef, sendQuery, metadata)}
     </AppContainer>
   );
 }
@@ -96,7 +108,7 @@ const Header = styled.header`
   position: sticky;
   left: 0;
 
-  background-color: #282c34;
+  background-color: ${headerBackground};
   height: 12vh;
   display: flex;
   flex-direction: column;

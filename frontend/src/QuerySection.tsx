@@ -60,9 +60,11 @@ function renderColumnValue(column: ColumnValue, index: number) {
   } else if (column.Timestamp !== undefined) {
     return <TextValue>{column.Timestamp.v}</TextValue>;
   } else if (column.Blob !== undefined) {
-    const s = atob(column.Blob.v);
-    if (false)
-      return <LargeValue>{s}</LargeValue>;
+    console.log(column);
+    const s = column.Blob.v; //atob(column.Blob.v);
+    if (true)
+      return <TextValue>{s}</TextValue>;
+      //return <LargeValue>{s}</LargeValue>;
     else {
       const json = JSON.parse(s);
       const pretty = JSON.stringify(json, null, 2);
@@ -79,7 +81,7 @@ function renderColumnDef(def: ColumnDefinition, index: number) {
   const { name, dataType } = def;
   return (
     <HeadCell key={name}>
-      <ColumnName>{name}</ColumnName><ColumnDataType>: {dataType}</ColumnDataType>
+      <ColumnName>{name}</ColumnName><ColumnDataType>: {dataType.code}</ColumnDataType>
     </HeadCell>
   );
 }

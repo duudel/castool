@@ -33,32 +33,32 @@ object RqlService {
     def query(q: String): IO[Errors, QueryResult]
   }
 
-  def convertDataType(ct: ColumnValue.DataType.Value): rql.ValueType = ct match {
-    case ColumnValue.DataType.Ascii     => rql.ValueType.Str
-    case ColumnValue.DataType.BigInt    => rql.ValueType.Num
-    case ColumnValue.DataType.Blob      => rql.ValueType.Blob
-    case ColumnValue.DataType.Bool      => rql.ValueType.Bool
-    case ColumnValue.DataType.Counter   => rql.ValueType.Num
-    case ColumnValue.DataType.Date      => rql.ValueType.Date
-    case ColumnValue.DataType.Decimal   => rql.ValueType.Num
-    case ColumnValue.DataType.Double    => rql.ValueType.Num
-    case ColumnValue.DataType.Duration  => rql.ValueType.Str
-    case ColumnValue.DataType.Float     => rql.ValueType.Num
-    case ColumnValue.DataType.Inet      => rql.ValueType.Str
-    case ColumnValue.DataType.Integer   => rql.ValueType.Num
-    case ColumnValue.DataType.SmallInt  => rql.ValueType.Num
-    case ColumnValue.DataType.Text      => rql.ValueType.Str
-    case ColumnValue.DataType.Time      => rql.ValueType.Str
-    case ColumnValue.DataType.TimeUuid  => rql.ValueType.Str
-    case ColumnValue.DataType.Timestamp => rql.ValueType.Date
-    case ColumnValue.DataType.TinyInt   => rql.ValueType.Num
-    case ColumnValue.DataType.Uuid      => rql.ValueType.Str
-    case ColumnValue.DataType.VarInt    => rql.ValueType.Num
-    case ColumnValue.DataType.List      => rql.ValueType.List
-    case ColumnValue.DataType.Map       => rql.ValueType.Obj
-    case ColumnValue.DataType.Set       => rql.ValueType.List
-    case ColumnValue.DataType.Tuple     => rql.ValueType.Str
-    case ColumnValue.DataType.Udt       => rql.ValueType.Str
+  def convertDataType(ct: ColumnValue.DataType): rql.ValueType = ct.code match {
+    case ColumnValue.DataTypeCode.Ascii     => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.BigInt    => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.Blob      => rql.ValueType.Blob
+    case ColumnValue.DataTypeCode.Bool      => rql.ValueType.Bool
+    case ColumnValue.DataTypeCode.Counter   => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.Date      => rql.ValueType.Date
+    case ColumnValue.DataTypeCode.Decimal   => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.Double    => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.Duration  => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.Float     => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.Inet      => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.Integer   => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.SmallInt  => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.Text      => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.Time      => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.TimeUuid  => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.Timestamp => rql.ValueType.Date
+    case ColumnValue.DataTypeCode.TinyInt   => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.Uuid      => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.VarInt    => rql.ValueType.Num
+    case ColumnValue.DataTypeCode.List      => rql.ValueType.List
+    case ColumnValue.DataTypeCode.Map       => rql.ValueType.Obj
+    case ColumnValue.DataTypeCode.Set       => rql.ValueType.List
+    case ColumnValue.DataTypeCode.Tuple     => rql.ValueType.Str
+    case ColumnValue.DataTypeCode.Udt       => rql.ValueType.Str
   }
 
   def convertCollectionValue(x: Any): rql.Value = x match {
@@ -203,10 +203,9 @@ object RqlService {
         metadata <- casSession.metadata
       } yield new rql.Compiler.Env {
         val tables: Map[String, SourceDef] = metadata.keyspaces.flatMap { keyspace =>
-          val kstabs: Seq[(String, rql.SourceDef)] = keyspace.tables.toSeq.map {
-            case (tableName, table) =>
-              val name = keyspace.name + "_" + tableName
-              name -> convertTable(table)
+          val kstabs: Seq[(String, rql.SourceDef)] = keyspace.tables.toSeq.map { table =>
+            val name = keyspace.name + "_" + table.name
+            name -> convertTable(table)
           }
           kstabs
         }.toMap
@@ -226,10 +225,9 @@ object RqlService {
           .mapError(t => Error(t.getMessage(), None) :: Nil)
       } yield new rql.Execution.Env {
         val tables: Map[String, (cassandra.Keyspace, cassandra.Table)] = metadata.keyspaces.flatMap { keyspace =>
-          val kstabs: Seq[(String, (cassandra.Keyspace, cassandra.Table))] = keyspace.tables.toSeq.map {
-            case (tableName, table) =>
-              val name = keyspace.name + "_" + tableName
-              name -> (keyspace -> table)
+          val kstabs: Seq[(String, (cassandra.Keyspace, cassandra.Table))] = keyspace.tables.toSeq.map { table =>
+            val name = keyspace.name + "_" + table.name
+            name -> (keyspace -> table)
           }
           kstabs
         }.toMap
