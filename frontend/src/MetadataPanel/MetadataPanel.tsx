@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import styled from "styled-components";
 
-import { metadataTreeBackground, metadataTreeLines } from "../colors";
+import { metadataTree } from "../colors";
 import { Metadata, Keyspace, Table } from "../types";
 import KeyspaceItem from "./KeyspaceItem";
 
@@ -56,6 +56,6 @@ const KeyspacesContainer = styled.div`
   display: flex;
   flex-direction: column;
   padding: 8px;
-  background: ${metadataTreeBackground};
+  background: ${metadataTree.background};
 `;
 

@@ -62,10 +62,10 @@ function KeyspaceItem(props: KeyspaceItemProps) {
       <TreeItemsContainer items={heightOfKeyspace}>
       {isKeyspaceOpen(keyspace) || true ? (
         <>
-        {keyspace.tables.map((table, index) =>
+        {keyspace.tables.map((table, tableIndex) =>
           <TreeItem key={"table-" + table.name}>
             <TreeItemLine>
-              <TreeItemIndent last={index + 1 === keyspace.tables.length}>
+              <TreeItemIndent last={tableIndex + 1 === keyspace.tables.length}>
                 <TreeItemIndentLine />
               </TreeItemIndent>
               <TreeItemTitle>
@@ -79,7 +79,7 @@ function KeyspaceItem(props: KeyspaceItemProps) {
               {table.columnDefs.map((columnDef, index) =>
                 <TreeItem key={"column-" + columnDef.name}>
                   <TreeItemLine>
-                    <TreeItemIndentBlank last={false} />
+                    <TreeItemIndentBlank last={tableIndex + 1 === keyspace.tables.length} />
                     <TreeItemIndent last={index + 1 === table.columnDefs.length}>
                       <TreeItemIndentLine />
                     </TreeItemIndent>

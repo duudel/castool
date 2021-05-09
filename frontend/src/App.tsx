@@ -25,7 +25,7 @@ function renderTab(
   tref: React.RefObject<HTMLDivElement>,
   splitContainerRef: React.RefObject<HTMLDivElement>,
   sendQuery: (msg: any) => void,
-  metadata: { data: Metadata | null, loading: boolean, error: string | null },
+  metadata: { data: Metadata | null, loading: boolean, error: string | null, refetch: () => void },
 ) {
   switch (tab) {
     case 0:
