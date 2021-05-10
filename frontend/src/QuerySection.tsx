@@ -1,115 +1,114 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { Dispatch, useCallback } from "react";
 
-import { ColumnDefinition, ColumnValue, ResultRow, ResultPage, dataTypeToString } from './types';
+import { ColumnDefinition, ColumnValue, ResultRow, ResultPage, dataTypeToString, ColumnValueDataTypeCode } from './types';
 import { Action, ActionType, State } from './reducer';
 
 import { JsonSyntaxHighlight } from './json-syntax/JsonSyntaxHighlight';
 
 import useSessionStorage from './utils/UseSessionStorageHook';
+import { blobToBase64String, blobToHexString } from './utils/blob';
 
-function columnValueToString(column: ColumnValue) {
-  if (column.Null !== undefined) {
-    return "NULL";
-  } else if (column.Ascii !== undefined) {
-    return column.Ascii.v;
-  } else if (column.Bool !== undefined) {
-    return column.Bool.v ? "true" : "false";
-  } else if (column.BigInt !== undefined) {
-    return column.BigInt.v.toString();
-  } else if (column.Integer !== undefined) {
-    return column.Integer.v.toString();
-  } else if (column.SmallInt !== undefined) {
-    return column.SmallInt.v.toString();
-  } else if (column.TinyInt !== undefined) {
-    return column.TinyInt.v.toString();
-  } else if (column.Double !== undefined) {
-    return column.Double.v.toString();
-  } else if (column.Float !== undefined) {
-    return column.Float.v.toString();
-  } else if (column.Counter !== undefined) {
-    return column.Counter.v.toString();
-  } else if (column.Uuid !== undefined) {
-    return column.Uuid.v;
-  } else if (column.TimeUuid !== undefined) {
-    return column.TimeUuid.v;
-  } else if (column.Text !== undefined) {
-    return column.Text.v;
-  } else if (column.Blob !== undefined) {
-    const s = atob(column.Blob.v);
-    const json = JSON.parse(s);
-    const pretty = JSON.stringify(json, null, 2);
-    return pretty;
-  } else if (column.List !== undefined) {
-    const value = column.List.v;
-    const pretty = JSON.stringify(value, null, 2);
-    return pretty;
-  } else if (column.Set !== undefined) {
-    const value = column.Set.v;
-    const pretty = JSON.stringify(value, null, 2);
-    return pretty;
-  } else if (column.Map !== undefined) {
-    const value = column.Map.v;
-    const pretty = JSON.stringify(value, null, 2);
-    return pretty;
-  } else {
-    return JSON.stringify(column);
+function columnValueToString(columnDef: ColumnDefinition, column: ColumnValue): string {
+  if (column === null) return "NULL";
+  switch (columnDef.dataType.code) {
+    case ColumnValueDataTypeCode.Ascii:
+    case ColumnValueDataTypeCode.Text:
+    case ColumnValueDataTypeCode.Uuid:
+    case ColumnValueDataTypeCode.TimeUuid:
+      return column as string;
+    case ColumnValueDataTypeCode.Bool:
+      return column === true ? "true" : "false";
+    case ColumnValueDataTypeCode.TinyInt:
+    case ColumnValueDataTypeCode.SmallInt:
+    case ColumnValueDataTypeCode.Integer:
+    case ColumnValueDataTypeCode.BigInt:
+    case ColumnValueDataTypeCode.Float:
+    case ColumnValueDataTypeCode.Double:
+    case ColumnValueDataTypeCode.Counter:
+      return column.toString();
+    case ColumnValueDataTypeCode.Blob: {
+      return blobToHexString(column);
+    }
+    case ColumnValueDataTypeCode.List: {
+      const pretty = JSON.stringify(column, null, 2);
+      return pretty;
+    }
+    case ColumnValueDataTypeCode.Set: {
+      const pretty = JSON.stringify(column, null, 2);
+      return pretty;
+    }
+    case ColumnValueDataTypeCode.Map: {
+      const pretty = JSON.stringify(column, null, 2);
+      return pretty;
+    }
+    default:
+      return JSON.stringify(column);
   }
 }
 
-function renderColumnValue(column: ColumnValue, index: number) {
-  if (column.Null !== undefined) {
-    return <NullValue>NULL</NullValue>;
-  } else if (column.Ascii !== undefined) {
-    return <TextValue>{column.Ascii.v}</TextValue>;
-  } else if (column.Bool !== undefined) {
-    return <BooleanValue>{column.Bool.v ? "true" : "false"}</BooleanValue>;
-  } else if (column.BigInt !== undefined) {
-    return <IntegerValue>{column.BigInt.v}</IntegerValue>;
-  } else if (column.Integer !== undefined) {
-    return <IntegerValue>{column.Integer.v}</IntegerValue>;
-  } else if (column.SmallInt !== undefined) {
-    return <IntegerValue>{column.SmallInt.v}</IntegerValue>;
-  } else if (column.TinyInt !== undefined) {
-    return <IntegerValue>{column.TinyInt.v}</IntegerValue>;
-  } else if (column.Double !== undefined) {
-    return <IntegerValue>{column.Double.v}</IntegerValue>;
-  } else if (column.Float !== undefined) {
-    return <IntegerValue>{column.Float.v}</IntegerValue>;
-  } else if (column.Counter !== undefined) {
-    return <IntegerValue>{column.Counter.v}</IntegerValue>;
-  } else if (column.TimeUuid !== undefined) {
-    return <IntegerValue>{column.TimeUuid.v}</IntegerValue>;
-  } else if (column.Uuid !== undefined) {
-    return <IntegerValue>{column.Uuid.v}</IntegerValue>;
-  } else if (column.Text !== undefined) {
-    return <TextValue>{column.Text.v}</TextValue>;
-  } else if (column.Timestamp !== undefined) {
-    return <TextValue>{column.Timestamp.v}</TextValue>;
-  } else if (column.Blob !== undefined) {
-    const s = column.Blob.v; //atob(column.Blob.v);
-    return <TextValue>{s}</TextValue>;
-  } else if (column.List !== undefined) {
-    const value = column.List.v;
-    const pretty = JSON.stringify(value, null, 2);
-    return <>
-      <JsonSyntaxHighlight value={pretty} nopre={false} />
-    </>;
-  } else if (column.Set !== undefined) {
-    const value = column.Set.v;
-    const pretty = JSON.stringify(value, null, 2);
-    return <>
-      <JsonSyntaxHighlight value={pretty} nopre={false} />
-    </>;
-  } else if (column.Map !== undefined) {
-    const value = column.Map.v;
-    const pretty = JSON.stringify(value, null, 2);
-    return <>
-      <JsonSyntaxHighlight value={pretty} nopre={false} />
-    </>;
+interface BlobProps {
+  blob: string;
+  type: "hex" | "base64";
+}
+
+function BlobText(props: BlobProps) {
+  const { blob } = props;
+  const [isOpen, setOpen] = useState(false);
+
+  const cappedLength = 16;
+  const str = useMemo(() => {
+    return blobToHexString(blob, isOpen ? 0 : cappedLength);
+  }, [blob, isOpen]);
+
+  if (str.length > 0) {
+    return (<>
+      <button onClick={() => setOpen(!isOpen)}>[</button>
+      <span>0x{str}{!isOpen && "..."}</span>
+      <span>]</span>
+    </>);
   } else {
-    return <UnknownValue>{JSON.stringify(column)}</UnknownValue>;
+    return <span>[ ]</span>;
+  }
+}
+
+function renderColumnValue(columnDef: ColumnDefinition, column: ColumnValue, index: number) {
+  if (column === null) return <NullValue>NULL</NullValue>;
+  switch (columnDef.dataType.code) {
+    case ColumnValueDataTypeCode.Ascii:
+    case ColumnValueDataTypeCode.Text:
+    case ColumnValueDataTypeCode.Uuid:
+    case ColumnValueDataTypeCode.TimeUuid:
+      return <TextValue>{column as string}</TextValue>;
+    case ColumnValueDataTypeCode.Bool:
+      return <BooleanValue>{column === true ? "true" : "false"}</BooleanValue>;
+    case ColumnValueDataTypeCode.TinyInt:
+    case ColumnValueDataTypeCode.SmallInt:
+    case ColumnValueDataTypeCode.Integer:
+    case ColumnValueDataTypeCode.BigInt:
+    case ColumnValueDataTypeCode.Float:
+    case ColumnValueDataTypeCode.Double:
+    case ColumnValueDataTypeCode.Counter:
+      return <IntegerValue>{column.toString()}</IntegerValue>;
+    case ColumnValueDataTypeCode.Blob: {
+      return <BlobText blob={column} type="hex" />;
+    }
+    case ColumnValueDataTypeCode.List: {
+      const pretty = JSON.stringify(column, null, 2);
+      return <JsonSyntaxHighlight value={pretty} nopre={false} />
+    }
+    case ColumnValueDataTypeCode.Set: {
+      const pretty = JSON.stringify(column, null, 2);
+      return <JsonSyntaxHighlight value={pretty} nopre={false} />
+    }
+    case ColumnValueDataTypeCode.Map: {
+      const pretty = JSON.stringify(column, null, 2);
+      return <JsonSyntaxHighlight value={pretty} nopre={false} />
+    }
+    default:
+      const pretty = JSON.stringify(column);
+      return <JsonSyntaxHighlight value={pretty} nopre={false} />
   }
 }
 
@@ -122,22 +121,23 @@ function renderColumnDef(def: ColumnDefinition, index: number) {
   );
 }
 
-function copyToClipBoardColumnValue(value: ColumnValue) {
-  const str = columnValueToString(value);
+function copyToClipBoardColumnValue(columnDef: ColumnDefinition, value: ColumnValue) {
+  const str = columnValueToString(columnDef, value);
   navigator.clipboard.writeText(str);
 }
 
-function renderRow(row: ResultRow, rowIndex: number) {
+function renderRow(row: ResultRow, rowIndex: number, columnDefs: ColumnDefinition[]) {
   return (
     <Row key={"row-" + rowIndex}>
       <RowNumber>{row.index}</RowNumber>
       {row.columnValues.map((column, i) => {
+        const columnDef = columnDefs[i];
         return (
           <Cell key={"c" + i}>
             <CopyIconContainer>
-              <CopyIcon onClick={() => copyToClipBoardColumnValue(column)}>⧉</CopyIcon>
+              <CopyIcon onClick={() => copyToClipBoardColumnValue(columnDef, column)}>⧉</CopyIcon>
             </CopyIconContainer>
-            {renderColumnValue(column, i)}
+            {renderColumnValue(columnDef, column, i)}
           </Cell>
         );
       })}
@@ -170,7 +170,7 @@ function QueryResultsSectionImpl(props: QueryResultsSectionProps) {
           </Row>
         </thead>
         <tbody>
-          {page.rows.map((row, i) => renderRow(row, i))}
+          {page.rows.map((row, i) => renderRow(row, i, columnDefs))}
         </tbody>
       </ResultsTable>
     ) : null;

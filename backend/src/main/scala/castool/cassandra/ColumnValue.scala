@@ -22,65 +22,49 @@ sealed trait ColumnValue
 object ColumnValue {
   import ColumnValues._
 
-  implicit val inetDecoder: Decoder[Inet] = (cursor: HCursor) => for {
-    s <- cursor.as[String]
-    result <- Try(Inet(InetAddress.getByName(s)))
-      .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
-  } yield result
-
-  implicit val inetEncoder: Encoder[Inet] = (inet: Inet) => Json.fromString(inet.v.getHostAddress())
-
-  // Long decoded from string and encoded to string
-  implicit val longDecoder: Decoder[Long] = (cursor: HCursor) => for {
-    s <- cursor.as[String]
-    result <- Try(s.toLong)
-      .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
-  } yield result
-
-  implicit val longEncoder: Encoder[Long] = (x: Long) => Json.fromString(x.toString)
-
-  implicit val listEncoder: Encoder[Vector[Any]] = (m: Vector[Any]) => {
-    val mapped = m.map {
-      case b: Boolean => b.asJson
-      case s: String => s.asJson
-      case n: Int => n.asJson
-      case n: Double => n.asJson
-    }
-
-    Json.arr(mapped: _*)
-  }
-
-  implicit val setEncoder: Encoder[scala.collection.Set[Any]] = (m: scala.collection.Set[Any]) => {
-    val mapped = m.map {
-      case b: Boolean => b.asJson
-      case s: String => s.asJson
-      case n: Int => n.asJson
-      case n: Long => n.asJson
-      case n: Double => n.asJson
-    }
-
-    Json.arr(mapped.toSeq: _*)
-  }
-  
-  implicit val blobEncoder: Encoder[Blob] = (blob: Blob) => {
-    val s = Base64.getEncoder.encodeToString(blob.v)
-    Json.obj("v" -> s.asJson)
-  }
-
-  implicit val mapEncoder: Encoder[scala.collection.Map[Any, Any]] = (m: scala.collection.Map[Any, Any]) => {
-    val mapped = m.mapValues {
-      case b: Boolean => b.asJson
-      case s: String => s.asJson
-      case n: Int => n.asJson
-      case n: Long => n.asJson
-      case n: Double => n.asJson
-    }
-
-    Json.obj(mapped.map { case (k, v) => k.toString -> v }.toVector: _*)
-  }
-
   //implicit val decoder: Decoder[ColumnValue] = deriveDecoder
-  implicit val encoder: Encoder[ColumnValue] = deriveEncoder
+  //implicit val encoder: Encoder[ColumnValue] = deriveEncoder
+  private def convertAny(x: Any): Json = x match {
+    case b: Boolean => b.asJson
+    case s: String => s.asJson
+    case n: Byte => n.asJson
+    case n: Short => n.asJson
+    case n: Int => n.asJson
+    case n: Long => n.asJson
+    case n: Double => n.asJson
+  }
+  implicit val encoder: Encoder[ColumnValue] = (v: ColumnValue) => v match {
+    case Null => Json.Null
+    case Unknown(v: String) => Json.fromString(v)
+
+    case Ascii(v: String) => Json.fromString(v)
+    case BigInt(v: Long) => Json.fromLong(v)
+    case Blob(v: Array[Byte]) =>
+      val s = Base64.getEncoder.encodeToString(v)
+      Json.fromString(s)
+    case Bool(v: Boolean) => if (v) Json.True else Json.False
+    case Counter(v: Long) => Json.fromLong(v)
+    case Decimal(v: scala.BigDecimal) => Json.fromBigDecimal(v)
+    case Double(v: scala.Double) => Json.fromDouble(v).getOrElse(Json.fromInt(0))
+    case Float(v: scala.Float) => Json.fromFloat(v).getOrElse(Json.fromInt(0))
+    case Integer(v: Int) => Json.fromInt(v)
+    case SmallInt(v: Short) => Json.fromInt(v)
+    case TinyInt(v: Byte) => Json.fromInt(v)
+    case Timestamp(v: java.time.Instant) => Json.fromString(v.toString)
+    case Uuid(v: java.util.UUID) => Json.fromString(v.toString)
+    case VarInt(v: scala.BigInt) => Json.fromBigInt(v)
+    case TimeUuid(v: java.util.UUID) => Json.fromString(v.toString)
+    case Text(v: String) => Json.fromString(v)
+    case Inet(v: InetAddress) => Json.fromString(v.getHostAddress())
+    case Date(v: java.time.LocalDate) => Json.fromString(v.toString)
+    case Time(v: java.time.LocalTime) => Json.fromString(v.toString)
+    case Duration(v: String) => Json.fromString(v)
+    case List(v: Vector[Any]) => Json.fromValues(v.map(convertAny))
+    case Set(v: scala.collection.Set[Any]) => Json.fromValues(v.map(convertAny))
+    case Map(v: scala.collection.Map[Any, Any]) => Json.fromFields(v.map { case (key, value) => key.toString -> convertAny(value) })
+    case Tuple(v: String) => Json.fromString(v)
+    case Udt(v: String) => Json.fromString(v)
+  }
 
   def fromValue[C <: ColumnValue, T](f: T => C)(v: T): ColumnValue =
     Option(v).map(f).getOrElse(Null)
@@ -358,5 +342,62 @@ object ColumnValues {
   case class Set(v: scala.collection.Set[Any]) extends ColumnValue // ProtocolConstants.DataType.SET
   case class Tuple(v: String) extends ColumnValue // ProtocolConstants.DataType.TUPLE
   case class Udt(v: String) extends ColumnValue // ProtocolConstants.DataType.UDT
+
+  implicit val inetDecoder: Decoder[Inet] = (cursor: HCursor) => for {
+    s <- cursor.as[String]
+    result <- Try(Inet(InetAddress.getByName(s)))
+      .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
+  } yield result
+
+  implicit val inetEncoder: Encoder[Inet] = (inet: Inet) => Json.fromString(inet.v.getHostAddress())
+
+  // Long decoded from string and encoded to string
+  implicit val longDecoder: Decoder[Long] = (cursor: HCursor) => for {
+    s <- cursor.as[String]
+    result <- Try(s.toLong)
+      .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
+  } yield result
+
+  implicit val longEncoder: Encoder[Long] = (x: Long) => Json.fromString(x.toString)
+
+  implicit val blobEncoder: Encoder[Blob] = (blob: Blob) => {
+    val s = Base64.getEncoder.encodeToString(blob.v)
+    Json.obj("v" -> s.asJson)
+  }
+
+  implicit val listEncoder: Encoder[Vector[Any]] = (m: Vector[Any]) => {
+    val mapped = m.map {
+      case b: Boolean => b.asJson
+      case s: String => s.asJson
+      case n: Int => n.asJson
+      case n: Double => n.asJson
+    }
+
+    Json.arr(mapped: _*)
+  }
+
+  implicit val setEncoder: Encoder[scala.collection.Set[Any]] = (m: scala.collection.Set[Any]) => {
+    val mapped = m.map {
+      case b: Boolean => b.asJson
+      case s: String => s.asJson
+      case n: Int => n.asJson
+      case n: Long => n.asJson
+      case n: Double => n.asJson
+    }
+
+    Json.arr(mapped.toSeq: _*)
+  }
+
+  implicit val mapEncoder: Encoder[scala.collection.Map[Any, Any]] = (m: scala.collection.Map[Any, Any]) => {
+    val mapped = m.mapValues {
+      case b: Boolean => b.asJson
+      case s: String => s.asJson
+      case n: Int => n.asJson
+      case n: Long => n.asJson
+      case n: Double => n.asJson
+    }
+
+    Json.obj(mapped.map { case (k, v) => k.toString -> v }.toVector: _*)
+  }
 }
 

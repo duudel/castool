@@ -398,7 +398,7 @@ function RQLBlob(props: RQLBlobProps) {
   const cappedLength = 16;
   const str = useMemo(() => {
     return blobToHexString(blob, isOpen ? 0 : cappedLength);
-  }, [blob.blob]);
+  }, [blob.blob, isOpen]);
 
   if (str.length > 0) {
     return (<>
