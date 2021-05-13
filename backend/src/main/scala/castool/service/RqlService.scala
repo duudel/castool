@@ -183,10 +183,26 @@ object RqlService {
     .addFunction(n"btoa", Seq("stringToEncode" -> rql.ValueType.Str), rql.Eval(btoa))
     .addFunction(n"blobAsString", Seq("blob" -> rql.ValueType.Blob), rql.Eval(blobAsString))
     .addFunction(n"uuidToDate", Seq("uuid" -> rql.ValueType.Str), rql.Eval(uuid_to_date))
-    .addFunction(n"length", Seq("str" -> rql.ValueType.Str), rql.Eval((str: rql.Str) => rql.Num(str.v.length)))
-    .addFunction(n"length", Seq("blob" -> rql.ValueType.Blob), rql.Eval((blob: rql.Blob) => rql.Num(blob.v.length)))
-    .addFunction(n"length", Seq("list" -> rql.ValueType.List), rql.Eval((list: rql.List) => rql.Num(list.v.length)))
-    .addFunction(n"bin", Seq("value" -> rql.ValueType.Num, "roundTo" -> rql.ValueType.Num), rql.Eval((value: rql.Num, roundTo: rql.Num) => rql.Num((value.v/roundTo.v).round * roundTo.v)))
+    .addFunction(n"length", Seq("str" -> rql.ValueType.Str),
+      rql.Eval((x: rql.Value) => x match {
+        case rql.Null => rql.Num(0)
+        case str: rql.Str => rql.Num(str.v.length)
+      })
+    )
+    .addFunction(n"length", Seq("blob" -> rql.ValueType.Blob),
+      rql.Eval((x: rql.Value) => x match {
+        case rql.Null => rql.Num(0)
+        case blob: rql.Blob => rql.Num(blob.v.length)
+      })
+    )
+    .addFunction(n"length", Seq("list" -> rql.ValueType.List),
+      rql.Eval((x: rql.Value) => x match {
+        case rql.Null => rql.Num(0)
+        case list: rql.List => rql.Num(list.v.length)
+      })
+    )
+    .addFunction(n"bin", Seq("value" -> rql.ValueType.Num, "roundTo" -> rql.ValueType.Num),
+      rql.Eval((value: rql.Num, roundTo: rql.Num) => rql.Num((value.v/roundTo.v).floor * roundTo.v)))
     .addFunction(n"jsonToObject", ("value", rql.ValueType.Str) :: Nil, rql.Eval(jsonToObject))
     .addAggregation[rql.Num](n"count", Seq("x" -> rql.ValueType.Num), rql.Num(0), rql.Eval(() => rql.Num(1)), (x, num) => num)
     .addAggregation(n"average",
