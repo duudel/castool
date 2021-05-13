@@ -49,6 +49,10 @@ export const TreeItemIndentLine = styled.div`
   border-bottom: 1px solid ${metadataTree.lines};
 `;
 
+export const TreeItemIndentEmpty = styled.div`
+  width: 25px;
+`;
+
 export const TreeIcon = styled.button`
   box-sizing: border-box;
   display: flex;
@@ -70,6 +74,6 @@ export const TreeItemsContainer = styled.div<{ items: number }>`
   flex-direction: column;
   height: ${p => p.items * TreeItem_Height}px;
   transition: height 100ms linear;
-  overflow: hidden;
+  /*overflow-y: hidden;*/
 `;
 

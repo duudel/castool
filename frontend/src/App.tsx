@@ -6,9 +6,7 @@ import "./App.css";
 
 import { useWebsocket } from './utils/UseWebsocketHook';
 import { useFetch } from './utils/UseFetch';
-import Split from './Split';
 import QuerySection from './QuerySection';
-import { TransformerSection } from './TransformerSection';
 
 import { Action, ActionType, reducer, initialState, State, QueryStatus } from './reducer';
 
@@ -72,9 +70,12 @@ function App() {
         </TabButtonStrip>
         <TabStripBottom />
       </Header>
-      <TabContainer>
-        {renderTab(tab, state, dispatch, sendQuery, metadata)}
-      </TabContainer>
+      <Content>
+        <MetadataPanel {...metadata} />
+        <TabContainer>
+          {renderTab(tab, state, dispatch, sendQuery, metadata)}
+        </TabContainer>
+      </Content>
     </AppContainer>
   );
 }
@@ -86,7 +87,14 @@ const AppContainer = styled.div`
   height: 100vh;
 `;
 
+const Content = styled.div`
+  display: flex;
+  flex-direction: row;
+`;
+
 const TabContainer = styled.div`
+  width:100%;
+  height:100%;
 `;
 
 const AppLogo = styled.img<{ idle: boolean }>`

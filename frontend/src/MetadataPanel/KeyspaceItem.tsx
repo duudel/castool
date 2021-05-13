@@ -3,7 +3,7 @@ import styled from "styled-components";
 
 import { detailColor } from "../colors";
 import { Keyspace, Table, dataTypeToString } from "../types";
-import { TreeItem, TreeItemLine, TreeIcon, TreeItemIndent, TreeItemIndentBlank, TreeItemIndentLine, TreeItemTitle, TreeItemsContainer } from "./TreeItem";
+import { TreeItem, TreeItemLine, TreeIcon, TreeItemIndent, TreeItemIndentBlank, TreeItemIndentLine, TreeItemIndentEmpty, TreeItemTitle, TreeItemsContainer } from "./TreeItem";
 
 interface KeyspaceItemProps {
   keyspace: Keyspace;
@@ -56,7 +56,7 @@ function KeyspaceItem(props: KeyspaceItemProps) {
         <b>{keyspace.name}</b>
       </TreeItemTitle>
       <TreeItemsContainer items={heightOfKeyspace}>
-      {isKeyspaceOpen(keyspace) || true ? (
+      {isKeyspaceOpen(keyspace) || false ? (
         <>
         {keyspace.tables.map((table, tableIndex) =>
           <TreeItem key={"table-" + table.name}>
@@ -75,7 +75,9 @@ function KeyspaceItem(props: KeyspaceItemProps) {
               {table.columnDefs.map((columnDef, index) =>
                 <TreeItem key={"column-" + columnDef.name}>
                   <TreeItemLine>
-                    <TreeItemIndentBlank last={tableIndex + 1 === keyspace.tables.length} />
+                    <TreeItemIndentBlank last={tableIndex + 1 === keyspace.tables.length}>
+                      <TreeItemIndentEmpty />
+                    </TreeItemIndentBlank>
                     <TreeItemIndent last={index + 1 === table.columnDefs.length}>
                       <TreeItemIndentLine />
                     </TreeItemIndent>
