@@ -22,23 +22,25 @@ sealed trait ColumnValue
 object ColumnValue {
   import ColumnValues._
 
-  //implicit val decoder: Decoder[ColumnValue] = deriveDecoder
-  //implicit val encoder: Encoder[ColumnValue] = deriveEncoder
+  // TODO: support for more types?
+  
+  val jsZero = Json.fromInt(0)
   private def convertAny(x: Any): Json = x match {
-    case b: Boolean => b.asJson
-    case s: String => s.asJson
-    case n: Byte => n.asJson
-    case n: Short => n.asJson
-    case n: Int => n.asJson
-    case n: Long => n.asJson
-    case n: Double => n.asJson
+    case b: Boolean => Json.fromBoolean(b)
+    case s: String => Json.fromString(s)
+    case n: Byte => Json.fromInt(n)
+    case n: Short => Json.fromInt(n)
+    case n: Int => Json.fromInt(n)
+    case n: Long => Json.fromLong(n)
+    case n: scala.Float => Json.fromFloat(n).getOrElse(jsZero)
+    case n: scala.Double => Json.fromDouble(n).getOrElse(jsZero)
   }
   implicit val encoder: Encoder[ColumnValue] = (v: ColumnValue) => v match {
     case Null => Json.Null
     case Unknown(v: String) => Json.fromString(v)
 
     case Ascii(v: String) => Json.fromString(v)
-    case BigInt(v: Long) => Json.fromLong(v)
+    case BigInt(v: Long) => Json.fromLong(v) // Can handle integers only up to 2^53 - 1 accurately
     case Blob(v: Array[Byte]) =>
       val s = Base64.getEncoder.encodeToString(v)
       Json.fromString(s)
@@ -343,61 +345,12 @@ object ColumnValues {
   case class Tuple(v: String) extends ColumnValue // ProtocolConstants.DataType.TUPLE
   case class Udt(v: String) extends ColumnValue // ProtocolConstants.DataType.UDT
 
-  implicit val inetDecoder: Decoder[Inet] = (cursor: HCursor) => for {
-    s <- cursor.as[String]
-    result <- Try(Inet(InetAddress.getByName(s)))
-      .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
-  } yield result
+  //implicit val inetDecoder: Decoder[Inet] = (cursor: HCursor) => for {
+  //  s <- cursor.as[String]
+  //  result <- Try(Inet(InetAddress.getByName(s)))
+  //    .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
+  //} yield result
 
-  implicit val inetEncoder: Encoder[Inet] = (inet: Inet) => Json.fromString(inet.v.getHostAddress())
-
-  // Long decoded from string and encoded to string
-  implicit val longDecoder: Decoder[Long] = (cursor: HCursor) => for {
-    s <- cursor.as[String]
-    result <- Try(s.toLong)
-      .toEither.left.map { ex => DecodingFailure(s"${ex.getMessage()}", cursor.history) }
-  } yield result
-
-  implicit val longEncoder: Encoder[Long] = (x: Long) => Json.fromString(x.toString)
-
-  implicit val blobEncoder: Encoder[Blob] = (blob: Blob) => {
-    val s = Base64.getEncoder.encodeToString(blob.v)
-    Json.obj("v" -> s.asJson)
-  }
-
-  implicit val listEncoder: Encoder[Vector[Any]] = (m: Vector[Any]) => {
-    val mapped = m.map {
-      case b: Boolean => b.asJson
-      case s: String => s.asJson
-      case n: Int => n.asJson
-      case n: Double => n.asJson
-    }
-
-    Json.arr(mapped: _*)
-  }
-
-  implicit val setEncoder: Encoder[scala.collection.Set[Any]] = (m: scala.collection.Set[Any]) => {
-    val mapped = m.map {
-      case b: Boolean => b.asJson
-      case s: String => s.asJson
-      case n: Int => n.asJson
-      case n: Long => n.asJson
-      case n: Double => n.asJson
-    }
-
-    Json.arr(mapped.toSeq: _*)
-  }
-
-  implicit val mapEncoder: Encoder[scala.collection.Map[Any, Any]] = (m: scala.collection.Map[Any, Any]) => {
-    val mapped = m.mapValues {
-      case b: Boolean => b.asJson
-      case s: String => s.asJson
-      case n: Int => n.asJson
-      case n: Long => n.asJson
-      case n: Double => n.asJson
-    }
-
-    Json.obj(mapped.map { case (k, v) => k.toString -> v }.toVector: _*)
-  }
+  //implicit val inetEncoder: Encoder[Inet] = (inet: Inet) => Json.fromString(inet.v.getHostAddress())
 }
 

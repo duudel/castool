@@ -12,9 +12,6 @@ import shapeless.Succ
 sealed trait RqlMessage extends Product with Serializable
 
 object RqlMessage {
-  //implicit val valueDecoder: Decoder[rql.Value] = deriveDecoder
-  //implicit val valueEncoder: Encoder[rql.Value] = deriveEncoder
-
   implicit val valueEncoder: Encoder[rql.Value] = Encoder.instance {
     case rql.Null => Json.Null
     case rql.Bool(v) if v => Json.True
@@ -66,13 +63,6 @@ object RqlMessage {
     case "Rows" => deriveDecoder[Rows]
     case "Finished" => deriveDecoder[Finished.type]
   }
-
-  //implicit val encoder: Encoder[RqlMessage] = Encoder.instance {
-  //  case x: Success => x.asJsonObject + ("_type" -> "Success")
-  //  case x: Error => x.asJsonObject + ("_type" -> )
-  //  case x: Rows => x.asJson
-  //  case Finished => Finished.asJson
-  //}
 
   case class Success(columns: Seq[(String, rql.ValueType)]) extends RqlMessage
   case class Error(errors: Seq[String]) extends RqlMessage
