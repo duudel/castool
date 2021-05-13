@@ -9,6 +9,7 @@ import { JsonSyntaxHighlight } from './json-syntax/JsonSyntaxHighlight';
 
 import useSessionStorage from './utils/UseSessionStorageHook';
 import { blobToBase64String, blobToHexString } from './utils/blob';
+import {detailColor} from './colors';
 
 function columnValueToString(columnDef: ColumnDefinition, column: ColumnValue): string {
   if (column === null) return "NULL";
@@ -57,21 +58,55 @@ function BlobText(props: BlobProps) {
   const { blob } = props;
   const [isOpen, setOpen] = useState(false);
 
-  const cappedLength = 16;
+  const cappedLength = 8;
   const str = useMemo(() => {
     return blobToHexString(blob, isOpen ? 0 : cappedLength);
   }, [blob, isOpen]);
 
   if (str.length > 0) {
-    return (<>
-      <button onClick={() => setOpen(!isOpen)}>[</button>
-      <span>0x{str}{!isOpen && "..."}</span>
-      <span>]</span>
-    </>);
+    return (<BlobContainer>
+      <BlobContent>
+        <BlobButton onClick={() => setOpen(!isOpen)}>[</BlobButton>
+        0x{str}{!isOpen && "..."}]
+      </BlobContent>
+      <BlobLen>{blob.length} bytes</BlobLen>
+    </BlobContainer>);
   } else {
-    return <span>[ ]</span>;
+    return <BlobContainer><BlobContent>[ ]</BlobContent></BlobContainer>;
   }
 }
+
+const BlobButton = styled.button`
+  font-size: 1.1em;
+  display: flex;
+  flex-direction: row;
+  padding: 4px;
+  margin: 0;
+  border: 1px solid transparent;
+  background: transparent;
+`;
+
+const BlobContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: baseline;
+  &:hover {
+    ${BlobButton} {
+      border: 1px solid #aaa;
+      background: #eee;
+    }
+  }
+`;
+
+const BlobContent = styled.div`
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+`;
+
+const BlobLen = styled.div`
+  color: ${detailColor};
+`;
 
 function renderColumnValue(columnDef: ColumnDefinition, column: ColumnValue, index: number) {
   if (column === null) return <NullValue>NULL</NullValue>;
@@ -183,12 +218,10 @@ interface QuerySectionProps {
   dispatch: Dispatch<Action>,
   sendQuery: (query: string) => void,
   state: State;
-
-  forwardRef: { current: HTMLDivElement | null };
 }
 
 function QuerySection(props: QuerySectionProps) {
-  const { forwardRef, dispatch, sendQuery, state: { columnDefinitions, resultsNum, results, page, queryError } } = props;
+  const { dispatch, sendQuery, state: { columnDefinitions, resultsNum, results, page, queryError } } = props;
   const [queryInput, setQueryInput] = useSessionStorage("query.input", "SELECT * FROM calloff.messages;");
 
   const setPage = useCallback((page: number) => dispatch({ type: ActionType.ON_SET_PAGE, page }), [dispatch]);
@@ -201,7 +234,7 @@ function QuerySection(props: QuerySectionProps) {
     sendQuery(queryInput);
   }, [setPage, dispatch, sendQuery, queryInput]);
 
-  return <Container ref={forwardRef}>
+  return <Container>
     <TopSection>
       <QueryInputContainer>
         <QueryInput

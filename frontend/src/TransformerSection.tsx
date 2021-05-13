@@ -45,16 +45,15 @@ function rowsObservable(state: State): rql.RowsObs {
 }
 
 interface ResultsContainerProps {
-  forwardRef: { current: HTMLDivElement | null };
   state: Pick<State, "tx">;
 }
 
 function ResultsContainer(props: ResultsContainerProps) {
-  const { state: { tx: { schema, results, page, rowsPerPage } }, forwardRef } = props;
+  const { state: { tx: { schema, results, page, rowsPerPage } } } = props;
   const pageStart = rowsPerPage * page;
   const resultsOnPage = results.slice(pageStart, pageStart + rowsPerPage);
   return (schema.columns.length > 0) ? (
-  <ResultsTableContainer ref={forwardRef}>
+  <ResultsTableContainer>
     <ResultsTable>
       <thead>
         <Row>
@@ -112,13 +111,12 @@ const userFunctions: rql.UserFunctions = {
 };
 
 interface TransformerSectionProps {
-  forwardRef: { current: HTMLDivElement | null };
   state: State;
   dispatch: Dispatch<Action>;
 }
 
 export function TransformerSection(props: TransformerSectionProps) {
-  const { forwardRef, state, dispatch } = props;
+  const { state, dispatch } = props;
   const scriptRef = useRef<HTMLDivElement | null>(null);
   const resultsRef = useRef<HTMLDivElement | null>(null);
   const [script, setScript] = useSessionStorage("transform.script", "// Type script here");
@@ -211,7 +209,7 @@ export function TransformerSection(props: TransformerSectionProps) {
   const error = formatError(compileResult);
 
   return (
-    <Container ref={forwardRef}>
+    <Container>
       <ScriptContainer ref={scriptRef}>
         <div style={{display: "flex", flexDirection: "row"}}>
           <ScriptInput value={script} onChange={ev => setScript(ev.target.value)} />
@@ -223,8 +221,7 @@ export function TransformerSection(props: TransformerSectionProps) {
         </ScriptExecutionControls>
         {error && <span>{error}</span>}
       </ScriptContainer>
-      <Split A={scriptRef} B={resultsRef} container={forwardRef} />
-      <ResultsContainer state={state} forwardRef={resultsRef} />
+      <ResultsContainer state={state} />
     </Container>
   );
 }

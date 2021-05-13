@@ -29,11 +29,7 @@ function KeyspaceItem(props: KeyspaceItemProps) {
   const isTableOpen = useCallback((k: Keyspace, t: Table) => isOpen(k.name + "/" + t.name), [isOpen]);
   const toggleTable = useCallback((k: Keyspace, t: Table) => toggleOpen(k.name + "/" + t.name), [toggleOpen]);
 
-  const heightOfTable = (t: Table) => {
-    return calcHeightOfTable(t);
-  };
-
-  const calcHeightOfTable = useCallback((t: Table) => {
+  const heightOfTable = useCallback((t: Table) => {
     if (isTableOpen(keyspace, t)) {
       return t.columnDefs.length;
     } else {
@@ -45,19 +41,19 @@ function KeyspaceItem(props: KeyspaceItemProps) {
     if (isKeyspaceOpen(keyspace)) {
       let items = keyspace.tables.length;
       keyspace.tables.forEach(t => {
-        items += calcHeightOfTable(t);
+        items += heightOfTable(t);
       });
       return items;
     } else {
       return 0;
     }
-  }, [keyspace, isKeyspaceOpen, calcHeightOfTable]);
+  }, [keyspace, isKeyspaceOpen, heightOfTable]);
 
   return (
     <TreeItem key={"keyspace-" + keyspace.name}>
       <TreeItemTitle>
         <TreeIcon onClick={() => toggleKeyspace(keyspace)}>{isKeyspaceOpen(keyspace) ? "-" : "+"}</TreeIcon>
-        {keyspace.name}
+        <b>{keyspace.name}</b>
       </TreeItemTitle>
       <TreeItemsContainer items={heightOfKeyspace}>
       {isKeyspaceOpen(keyspace) || true ? (
@@ -74,7 +70,7 @@ function KeyspaceItem(props: KeyspaceItemProps) {
               </TreeItemTitle>
             </TreeItemLine>
             <TreeItemsContainer items={heightOfTable(table)}>
-            {isTableOpen(keyspace, table) || true ? (
+            {isTableOpen(keyspace, table) || false ? (
               <>
               {table.columnDefs.map((columnDef, index) =>
                 <TreeItem key={"column-" + columnDef.name}>

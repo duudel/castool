@@ -398,7 +398,7 @@ function RQLBlob(props: RQLBlobProps) {
   const cappedLength = 16;
   const str = useMemo(() => {
     return blobToHexString(blob, isOpen ? 0 : cappedLength);
-  }, [blob.blob, isOpen]);
+  }, [blob, isOpen]);
 
   if (str.length > 0) {
     return (<>
@@ -413,7 +413,6 @@ function RQLBlob(props: RQLBlobProps) {
 
 const RQLObjectOpenParen = styled.button`
   font-size: 16px;
-  /*margin-left: -8px;*/
   text-align: right;
   width: 16px;
   white-space: nowrap;

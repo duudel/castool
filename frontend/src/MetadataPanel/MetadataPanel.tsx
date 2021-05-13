@@ -1,8 +1,8 @@
-import React, { useCallback, useState } from "react";
+import React from "react";
 import styled from "styled-components";
 
 import { metadataTree } from "../colors";
-import { Metadata, Keyspace, Table } from "../types";
+import { Metadata } from "../types";
 import KeyspaceItem from "./KeyspaceItem";
 
 interface MetadataPanelProps {
@@ -37,7 +37,8 @@ export default MetadataPanel;
 const Container = styled.div`
   display: flex;
   flex-direction: column;
-  padding: 8px
+  padding: 8px;
+  background-color: #fff;
 `;
 
 const ClusterInfoContainer = styled.div`

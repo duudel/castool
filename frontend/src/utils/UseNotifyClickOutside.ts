@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 
 function useNotifyClickOutside<T extends HTMLElement>(ref: { current: T | null }, callback: () => void) {
   useEffect(() => {
@@ -12,7 +12,7 @@ function useNotifyClickOutside<T extends HTMLElement>(ref: { current: T | null }
     return () => {
       document.removeEventListener('mousedown', handle);
     };
-  }, [callback]);
+  }, [callback, ref]);
 }
 
 export default useNotifyClickOutside;

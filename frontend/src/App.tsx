@@ -1,5 +1,5 @@
 import React from "react";
-import { Dispatch, useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { Dispatch, useCallback, useReducer, useState } from "react";
 import styled from 'styled-components';
 import casLogo from "./logo/CasTool-2-icon.png";
 import "./App.css";
@@ -15,31 +15,21 @@ import { Action, ActionType, reducer, initialState, State, QueryStatus } from '.
 import RqlQueryTab from './RqlQueryTab';
 import { Metadata } from "./types";
 import MetadataPanel from "./MetadataPanel";
-import { headerBackground } from "./colors";
+import { headerBackground, mainTab } from "./colors";
 
 function renderTab(
   tab: number,
   state: State,
   dispatch: React.Dispatch<Action>,
-  qref: React.RefObject<HTMLDivElement>,
-  tref: React.RefObject<HTMLDivElement>,
-  splitContainerRef: React.RefObject<HTMLDivElement>,
   sendQuery: (msg: any) => void,
   metadata: { data: Metadata | null, loading: boolean, error: string | null, refetch: () => void },
 ) {
   switch (tab) {
     case 0:
       return (
-        <SplitContainer ref={splitContainerRef}>
-          <QuerySection forwardRef={qref} dispatch={dispatch} sendQuery={sendQuery} state={state} />
-          <Split
-            A={qref}
-            B={tref}
-            container={splitContainerRef}
-            minPixelsA={150}
-            minB={0.3}
-          />
-          <TransformerSection forwardRef={tref} state={state} dispatch={dispatch} />
+        <SplitContainer>
+          <QuerySection dispatch={dispatch} sendQuery={sendQuery} state={state} />
+          {/*<TransformerSection state={state} dispatch={dispatch} />*/}
         </SplitContainer>
       );
     case 1:
@@ -58,15 +48,12 @@ function App() {
   const metadata = useFetch<Metadata>({
     method: "GET",
     url: window.location.protocol + "//" + window.location.host + "/metadata",
+    expirationSeconds: 5000
   });
 
   console.log("Response ", metadata);
 
   const [tab, setTab] = useState(0);
-
-  const qref = useRef<HTMLDivElement | null>(null);
-  const tref = useRef<HTMLDivElement | null>(null);
-  const splitContainerRef = useRef<HTMLDivElement | null>(null);
 
   const logoIdle = state.queryStatus === QueryStatus.Done;
 
@@ -83,8 +70,11 @@ function App() {
           <TabButton selected={tab === 1} onClick={() => setTab(1)}>RQL Query</TabButton>
           <TabButton selected={tab === 2} onClick={() => setTab(2)}>Metadata</TabButton>
         </TabButtonStrip>
+        <TabStripBottom />
       </Header>
-      {renderTab(tab, state, dispatch, qref, tref, splitContainerRef, sendQuery, metadata)}
+      <TabContainer>
+        {renderTab(tab, state, dispatch, sendQuery, metadata)}
+      </TabContainer>
     </AppContainer>
   );
 }
@@ -94,6 +84,9 @@ export default App;
 const AppContainer = styled.div`
   overflow: scroll;
   height: 100vh;
+`;
+
+const TabContainer = styled.div`
 `;
 
 const AppLogo = styled.img<{ idle: boolean }>`
@@ -132,16 +125,29 @@ const HeaderMain = styled.header`
   color: white;
 `;
 
+const TabStripBottom = styled.div`
+  height: 5px;
+  background: #fff;
+`;
+
 const TabButtonStrip = styled.div`
-  margin-top: -10px;
+  display: flex;
+  flex-direction: row;
+  margin-top: -18px;
 `;
 
 const TabButton = styled.button<{ selected: boolean }>`
-  cursor: pointer;
-  padding: 5px;
-  background: #8f6f8f;
+  display: flex;
+  flex-direction: row;
+  padding: 8px;
+  background: ${mainTab.unselectedBackground};
+  height: 32px;
+  border: 1px solid ${mainTab.border};
+  border-radius: 4px;
+  font-size: 12px;
   ${({ selected }) => (selected ? "font-weight: bold" : "")};
-  ${({ selected }) => (selected ? "background: #fff; border-bottom: 0" : "")};
+  ${({ selected }) => (selected ? `background: ${mainTab.selectedBackground}; border-bottom: 0` : "")};
+  cursor: pointer;
 `;
 
 const ConnectionInfo = styled.div`
