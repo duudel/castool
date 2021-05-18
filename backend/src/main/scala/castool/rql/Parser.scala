@@ -426,8 +426,12 @@ object Parser {
     lazy val logical_and_expr: Parser[_ <: Ast.Expr] = logical_expr(TokenKind.and)(string_expr)
     lazy val logical_or_expr: Parser[_ <: Ast.Expr] = logical_expr(TokenKind.or)(logical_and_expr)
     lazy val expr: Parser[_ <: Ast.Expr] = logical_or_expr.trace("expr")
-    lazy val assignExpr: Parser[_ <: Ast.AssignmentExpr] = (column_expr ~ accept(TokenKind.assign) ~! expr).map {
-      case ((column, op), expr) => Ast.AssignmentExpr(column, expr, op.pos)
+    lazy val assignExpr: Parser[_ <: Ast.AssignmentExpr] = (acceptName ~ accept(TokenKind.assign) ~! expr).map {
+      case ((nameAndTok, op), expr) => Ast.AssignmentExpr(nameAndTok, expr, op.pos)
+    }
+    lazy val columnOrAssign_expr: Parser[_ <: Ast.ColumnOrAssignExpr] = (acceptName ~? (accept(TokenKind.assign) ~! expr)).map {
+      case (nameAndTok, None) => Ast.Column(nameAndTok.name, nameAndTok.tok.pos)
+      case (nameAndTok, Some((op, expr))) => Ast.AssignmentExpr(nameAndTok, expr, op.pos)
     }
 
     lazy val table: Parser[Ast.Table] = acceptName.map(nameAndTok => Ast.Table(name = nameAndTok.name, tok = nameAndTok.tok))
@@ -435,7 +439,7 @@ object Parser {
     lazy val extend: Parser[Ast.Extend] = (acceptIdent("extend") ~! assignExpr).map {
       case (e, assign) => Ast.Extend(assign = assign, pos = e.pos)
     }
-    lazy val project: Parser[Ast.Project] = (acceptIdent("project") ~! acceptName.*(accept(TokenKind.comma))).map {
+    lazy val project: Parser[Ast.Project] = (acceptIdent("project") ~! columnOrAssign_expr.*(accept(TokenKind.comma))).map {
       case (p, names) => Ast.Project(names, p.pos)
     }
     lazy val orderBy: Parser[Ast.OrderBy] = ((acceptIdent("order") ~! acceptIdent("by"))

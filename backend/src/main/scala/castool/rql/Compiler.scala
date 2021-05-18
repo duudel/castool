@@ -17,7 +17,7 @@ object Compiled {
 
   sealed trait TopLevelOp extends Compiled
   final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
-  final case class Project(names: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
+  final case class Project(names: Seq[Assignment[Value]], sourceDef: SourceDef) extends TopLevelOp
   final case class Assignment[A <: Value](name: Name, expr: Expr[A])
   final case class Extend(assign: Assignment[Value], sourceDef: SourceDef) extends TopLevelOp
   final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
@@ -75,8 +75,10 @@ object Compiler {
         for {
           compiledExpr <- compileExpr(expr)
         } yield Compiled.Where(compiledExpr, sourceDef)
-      case Checked.Project(names, sourceDef) =>
-        ZIO.succeed(Compiled.Project(names, sourceDef))
+      case Checked.Project(assignments, sourceDef) =>
+        for {
+          compiledAssignments <- ZIO.foreach(assignments)(compileAssignment)
+        } yield Compiled.Project(compiledAssignments, sourceDef)
       case Checked.Extend(assign, sourceDef) =>
         for {
           compiled <- compileAssignment[Value](assign)
@@ -280,7 +282,7 @@ object Compiler {
         }
     }
   }
-  
+
   def compileAssignment[A <: Value](assign: Checked.Assignment[A]): CompiledIO[Compiled.Assignment[A]] = {
     compileExpr(assign.expr).map { expr =>
       Compiled.Assignment(assign.name, expr)

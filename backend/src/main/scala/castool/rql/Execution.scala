@@ -39,9 +39,11 @@ object Execution {
     op match {
       case Compiled.Where(expr, _) =>
         source.filter((expr.eval _).andThen(_.v))
-      case Compiled.Project(names, _) =>
+      case Compiled.Project(assignments, _) =>
         source.map { input =>
-          val values = names.map(name => name -> input.values(name))
+          val values = assignments.map {
+            case Compiled.Assignment(name, expr) => name -> expr.eval(input)
+          }
           InputRow(values)
         }
       case Compiled.Extend(assign, _) =>

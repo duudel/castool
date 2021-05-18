@@ -15,7 +15,7 @@ object Checked {
 
   sealed trait TopLevelOp extends Checked with Serializable with Product { def sourceDef: SourceDef }
   final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
-  final case class Project(names: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
+  final case class Project(assignments: Seq[Assignment[Value]], sourceDef: SourceDef) extends TopLevelOp
   final case class Extend(assign: Assignment[_ <: Value], sourceDef: SourceDef) extends TopLevelOp
   final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
 
@@ -24,6 +24,8 @@ object Checked {
     def resultType: ValueType = aggrDef.returnType
   }
   final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
+
+  final case class Assignment[+A <: Value](name: Name, expr: Expr[A]) { def resultType: ValueType = expr.resultType }
 
   sealed trait Expr[+A <: Value] { def resultType: ValueType }
   final case class Column[A <: Value](name: Name, resultType: ValueType) extends Expr[A]
@@ -41,8 +43,6 @@ object Checked {
   final case class FunctionCall[A <: Value](functionDef: FunctionDef[A], args: Seq[Expr[_ <: Value]]) extends Expr[A] {
     def resultType: ValueType = functionDef.returnType
   }
-
-  final case class Assignment[+A <: Value](name: Name, expr: Expr[A]) { def resultType: ValueType = expr.resultType }
 
 }
 
@@ -80,24 +80,22 @@ object SemCheck {
         for {
           checkedExpr <- checkTypedExpr[Bool](expr, sourceDef)
         } yield Checked.Where(checkedExpr, sourceDef)
-      case Ast.Project(nameAndTok, pos) =>
-        val projected = nameAndTok.map {
-          case NameAndToken(name, tok) => name -> (sourceDef.get(name) -> tok)
-        }
-        val errors = projected.collect {
-          case (name, (None, tok)) => (s"No such column name as '${name.n}'", tok.pos)
-        }
-        if (errors.nonEmpty) {
-          val (error, pos) = errors.head
-          ZIO.fail(Error(error, Location(pos)))
-        } else {
-          val result = projected.collect {
-            case (name, (Some(valueType), _)) => name -> valueType
+      case Ast.Project(names, pos) =>
+        for {
+          projected <- ZIO.foreach(names) {
+            case column: Ast.Column =>
+              for {
+                checkedExpr <- checkExpr(column, sourceDef)
+              } yield Checked.Assignment(column.name, checkedExpr)
+            case Ast.AssignmentExpr(nameAndTok, expr, pos) =>
+              for {
+                checkedExpr <- checkExpr(expr, sourceDef)
+              } yield Checked.Assignment(nameAndTok.name, checkedExpr)
           }
-          val names = nameAndTok.map(_.name)
-          val projectedDef = SourceDef(result)
-          ZIO.succeed(Checked.Project(names, projectedDef))
-        }
+          projectedDef = SourceDef(projected.map {
+            case Checked.Assignment(name, expr) => name -> expr.resultType
+          })
+        } yield Checked.Project(projected, projectedDef)
       case Ast.Extend(assignExpr, pos) =>
         for {
           checkedExpr <- checkAssignment(assignExpr, sourceDef)
