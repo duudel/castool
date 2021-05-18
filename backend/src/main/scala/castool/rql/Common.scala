@@ -246,7 +246,6 @@ object BinaryOp {
   case object NotContains extends StringOp("!contains")
   case object And extends LogicalOp("and")
   case object Or extends LogicalOp("or")
-  case object Assign extends AssignOp("=")
 }
 
 case class SourceLocation(line: Int, column: Int)

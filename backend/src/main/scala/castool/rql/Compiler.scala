@@ -18,9 +18,10 @@ object Compiled {
   sealed trait TopLevelOp extends Compiled
   final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
   final case class Project(names: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
-  final case class Extend(name: Name, expr: Expr[Value], sourceDef: SourceDef) extends TopLevelOp
+  final case class Assignment[A <: Value](name: Name, expr: Expr[A])
+  final case class Extend(assign: Assignment[Value], sourceDef: SourceDef) extends TopLevelOp
   final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
-  case class Aggregation(name: Name, initialValue: Value, aggr: (Value, InputRow) => Value, finalPhase: (Value, Num) => Value)
+  final case class Aggregation(name: Name, initialValue: Value, aggr: (Value, InputRow) => Value, finalPhase: (Value, Num) => Value)
   final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
 }
 
@@ -76,10 +77,10 @@ object Compiler {
         } yield Compiled.Where(compiledExpr, sourceDef)
       case Checked.Project(names, sourceDef) =>
         ZIO.succeed(Compiled.Project(names, sourceDef))
-      case Checked.Extend(name, expr, sourceDef) =>
+      case Checked.Extend(assign, sourceDef) =>
         for {
-          compiledExpr <- compileExpr[Value](expr)
-        } yield Compiled.Extend(name, compiledExpr, sourceDef)
+          compiled <- compileAssignment[Value](assign)
+        } yield Compiled.Extend(compiled, sourceDef)
       case Checked.OrderBy(names, order, sourceDef) =>
         ZIO.succeed(Compiled.OrderBy(names, order, sourceDef))
       case Checked.Summarize(aggregations, groupBy, sourceDef) =>
@@ -269,10 +270,7 @@ object Compiler {
                 case (Bool(a), Bool(b)) => Bool(a || b).asInstanceOf[A]
               }
             }
-
-          case BinaryOp.Assign => throw new MatchError(op)
         }
-
       case Checked.FunctionCall(functionDef, args) =>
         for {
           compiledArgs <- ZIO.foreach(args)(compileExpr)
@@ -280,6 +278,12 @@ object Compiler {
           val arguments = compiledArgs.map(_.eval(input))
           functionDef.evaluate(arguments)
         }
+    }
+  }
+  
+  def compileAssignment[A <: Value](assign: Checked.Assignment[A]): CompiledIO[Compiled.Assignment[A]] = {
+    compileExpr(assign.expr).map { expr =>
+      Compiled.Assignment(assign.name, expr)
     }
   }
 

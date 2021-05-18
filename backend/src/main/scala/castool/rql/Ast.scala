@@ -15,7 +15,7 @@ object Ast {
   sealed trait TopLevelOp extends Ast with Serializable with Product
   final case class Where(expr: Expr, pos: Int) extends TopLevelOp
   final case class Project(names: Seq[NameAndToken], pos: Int) extends TopLevelOp
-  final case class Extend(name: NameAndToken, expr: Expr, pos: Int) extends TopLevelOp
+  final case class Extend(assign: AssignmentExpr, pos: Int) extends TopLevelOp
   final case class OrderBy(names: Seq[NameAndToken], order: Order, pos: Int) extends TopLevelOp
 
   case class Aggregation(name: NameAndToken, aggr: FunctionCall)
@@ -33,6 +33,7 @@ object Ast {
 
   final case class UnaryExpr(op: UnaryOp, expr: Expr, pos: Int) extends Expr
   final case class BinaryExpr(op: BinaryOp, exprA: Expr, exprB: Expr, pos: Int) extends Expr
+  final case class AssignmentExpr(name: Column, expr: Expr, pos: Int) extends Expr
   final case class FunctionCall(functionName: Name, args: Seq[Expr], pos: Int) extends Expr
 
 }

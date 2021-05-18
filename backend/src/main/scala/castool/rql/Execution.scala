@@ -44,10 +44,10 @@ object Execution {
           val values = names.map(name => name -> input.values(name))
           InputRow(values)
         }
-      case Compiled.Extend(name, expr, _) =>
+      case Compiled.Extend(assign, _) =>
         source.map { input =>
-          val value = expr.eval(input)
-          val newValue = (name, value)
+          val value = assign.expr.eval(input)
+          val newValue = (assign.name, value)
           InputRow(input.values + newValue)
         }
       case Compiled.OrderBy(names, order, _) =>

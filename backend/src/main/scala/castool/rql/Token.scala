@@ -26,12 +26,12 @@ object Token {
   final case class Comma(pos: Int) extends Tok(TokenKind.comma)
 
   // operators
+  final case class OpAssign(pos: Int) extends Tok(TokenKind.assign)
+
   sealed trait UnaryOpToken extends Token { def unaryOp: UnaryOp }
   sealed abstract class UnOpToken(val unaryOp: UnaryOp, val kind: TokenKind[UnOpToken]) extends UnaryOpToken { def display: String = unaryOp.display; }
   sealed abstract class BinOpToken(val binaryOp: BinaryOp) extends Token { def display: String = binaryOp.display }
   //sealed abstract class UnBinOpToken(binOp: BinaryOp, val unaryOp: UnaryOp) extends BinOpToken(binOp) with UnaryOpToken
-  sealed abstract class AssignOp(op: BinaryOp.AssignOp, val kind: TokenKind[AssignOp]) extends BinOpToken(op)
-  final case class OpAssign(pos: Int) extends AssignOp(BinaryOp.Assign, TokenKind.assign)
 
   final case class OpNot(pos: Int) extends UnOpToken(UnaryOp.Not, TokenKind.not)
 
@@ -88,7 +88,7 @@ object TokenKind {
     def print: String = UnaryOp.Not.display
   }
 
-  implicit val assign: TokenKind[OpAssign] = binOp(BinaryOp.Assign)
+  implicit val assign: TokenKind[OpAssign] = new TokenKind[OpAssign] { def print: String = "=" }
   implicit val plus: TokenKind[OpPlus] = binOp(BinaryOp.Plus)
   implicit val minus: TokenKind[OpMinus] = binOp(BinaryOp.Minus)
   implicit val multiply: TokenKind[OpMultiply] = binOp(BinaryOp.Multiply)

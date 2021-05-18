@@ -16,7 +16,7 @@ object Checked {
   sealed trait TopLevelOp extends Checked with Serializable with Product { def sourceDef: SourceDef }
   final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
   final case class Project(names: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
-  final case class Extend(name: Name, expr: Expr[_ <: Value], sourceDef: SourceDef) extends TopLevelOp
+  final case class Extend(assign: Assignment[_ <: Value], sourceDef: SourceDef) extends TopLevelOp
   final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
 
   case class Aggregation(name: Name, aggr: AggregationCall[Value])
@@ -41,6 +41,8 @@ object Checked {
   final case class FunctionCall[A <: Value](functionDef: FunctionDef[A], args: Seq[Expr[_ <: Value]]) extends Expr[A] {
     def resultType: ValueType = functionDef.returnType
   }
+
+  final case class Assignment[+A <: Value](name: Name, expr: Expr[A]) { def resultType: ValueType = expr.resultType }
 
 }
 
@@ -96,12 +98,12 @@ object SemCheck {
           val projectedDef = SourceDef(result)
           ZIO.succeed(Checked.Project(names, projectedDef))
         }
-      case Ast.Extend(name, expr, pos) =>
+      case Ast.Extend(assignExpr, pos) =>
         for {
-          checkedExpr <- checkExpr(expr, sourceDef)
+          checkedExpr <- checkAssignment(assignExpr, sourceDef)
         } yield {
-          val extendedDef = sourceDef.add(name.name, checkedExpr.resultType)
-          Checked.Extend(name.name, checkedExpr, extendedDef)
+          val extendedDef = sourceDef.add(checkedExpr.name, checkedExpr.resultType)
+          Checked.Extend(checkedExpr, extendedDef)
         }
       case Ast.OrderBy(names, order, pos) =>
         val projected = names.map { name => name -> sourceDef.get(name.name) }
@@ -142,6 +144,12 @@ object SemCheck {
     }
   }
 
+  def checkAssignment(ast: Ast.AssignmentExpr, sourceDef: SourceDef): Result[Checked.Assignment[Value]] = {
+    checkExpr(ast.expr, sourceDef).map { expr =>
+      Checked.Assignment(ast.name.name, expr)
+    }
+  }
+
   def checkExpr(ast: Ast.Expr, sourceDef: SourceDef): Result[Checked.Expr[Value]] = {
     ast match {
       case Ast.Column(name, pos) =>
@@ -171,6 +179,7 @@ object SemCheck {
         } yield Checked.BinaryExpr(op, checkedExprA, checkedExprB, resultType)
       case fc: Ast.FunctionCall =>
         checkFunctionCall(fc, sourceDef)
+      case a: Ast.AssignmentExpr => throw new MatchError(a)
     }
   }
 
@@ -205,7 +214,7 @@ object SemCheck {
           case (ValueType.Num, ValueType.Num) => ZIO.succeed(ValueType.Num)
           case (a, b) => fail(s"Incompatible types for expression $a ${op.display} $b")
         }
-      case BinaryOp.Equal | BinaryOp.NotEqual | BinaryOp.Less | BinaryOp.LessEq | BinaryOp.Greater | BinaryOp.GreaterEq | BinaryOp.Assign =>
+      case BinaryOp.Equal | BinaryOp.NotEqual | BinaryOp.Less | BinaryOp.LessEq | BinaryOp.Greater | BinaryOp.GreaterEq =>
         if (exprA.resultType == exprB.resultType) {
           ZIO.succeed(ValueType.Bool)
         } else {
