@@ -4,7 +4,6 @@ import styled from 'styled-components';
 import { useWebsocket } from "./utils/UseWebsocketHook";
 import useSessionStorage from "./utils/UseSessionStorageHook";
 import useNotifyClickOutside from "./utils/UseNotifyClickOutside";
-//import { RqlValue, RqlValueType, is_date, is_object } from "./server-rql/RqlValue";
 import * as rql from "./server-rql/index";
 
 interface ResultRow {
@@ -611,6 +610,7 @@ function RqlQueryTab(props: RqlQueryTabProps) {
         RQL query {wsStatus}
         <QueryInput
           value={queryInput}
+          rows={6}
           onChange={ev => setQueryInput(ev.target.value)}
           onSubmit={() => submit()}
         />

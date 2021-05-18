@@ -32,8 +32,6 @@ function renderTab(
       );
     case 1:
       return <RqlQueryTab />;
-    case 2:
-      return <MetadataPanel {...metadata} />
   }
 }
 
@@ -66,7 +64,6 @@ function App() {
         <TabButtonStrip>
           <TabButton selected={tab === 0} onClick={() => setTab(0)}>CQL Query</TabButton>
           <TabButton selected={tab === 1} onClick={() => setTab(1)}>RQL Query</TabButton>
-          <TabButton selected={tab === 2} onClick={() => setTab(2)}>Metadata</TabButton>
         </TabButtonStrip>
         <TabStripBottom />
       </Header>
@@ -142,6 +139,7 @@ const TabButtonStrip = styled.div`
   display: flex;
   flex-direction: row;
   margin-top: -18px;
+  margin-left: 20px;
 `;
 
 const TabButton = styled.button<{ selected: boolean }>`

@@ -4,6 +4,11 @@ import { metadataTree } from "../colors";
 
 const TreeItem_Height = 24;
 
+export const TopItem = styled.div`
+  font-weight: bold;
+  font-size: 16px;
+`;
+
 export const TreeItem = styled.div`
   display: flex;
   flex-direction: column;
