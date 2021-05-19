@@ -19,7 +19,7 @@ object Ast {
   final case class OrderBy(names: Seq[NameAndToken], order: Order, pos: Int) extends TopLevelOp
 
   case class Aggregation(name: NameAndToken, aggr: FunctionCall)
-  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[NameAndToken], pos: Int) extends TopLevelOp
+  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[ColumnOrAssignExpr], pos: Int) extends TopLevelOp
 
   sealed trait Expr extends Ast
   sealed trait ColumnOrAssignExpr extends Expr

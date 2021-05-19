@@ -459,7 +459,7 @@ object Parser {
     lazy val summarize: Parser[Ast.Summarize] = (acceptIdent("summarize")
       ~! (acceptName ~ (accept(TokenKind.assign) ~> funcCall_expr))
           .+(accept(TokenKind.comma))
-      ~? (acceptIdent("by") ~ acceptName.*(accept(TokenKind.comma)))).map {
+      ~? (acceptIdent("by") ~ columnOrAssign_expr.*(accept(TokenKind.comma)))).map {
         case ((s, aggrs), groupByOpt) =>
           val aggregations = aggrs.map { case (nameAndTok, aggr) => Ast.Aggregation(nameAndTok, aggr) }
           val groupBy = groupByOpt.map(_._2).getOrElse(Seq.empty)

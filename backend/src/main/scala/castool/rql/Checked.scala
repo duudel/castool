@@ -9,17 +9,17 @@ object Checked {
 
   sealed trait TopLevelOp extends Checked with Serializable with Product { def sourceDef: SourceDef }
   final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
-  final case class Project(assignments: Seq[Assignment[Value]], sourceDef: SourceDef) extends TopLevelOp
-  final case class Extend(assign: Assignment[_ <: Value], sourceDef: SourceDef) extends TopLevelOp
+  final case class Project(assignments: Seq[Assignment], sourceDef: SourceDef) extends TopLevelOp
+  final case class Extend(assign: Assignment, sourceDef: SourceDef) extends TopLevelOp
   final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
 
   case class Aggregation(name: Name, aggr: AggregationCall[Value])
   final case class AggregationCall[A <: Value](aggrDef: AggregationDef[A], args: Seq[Expr[_ <: Value]]) {
     def resultType: ValueType = aggrDef.returnType
   }
-  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
+  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Assignment], sourceDef: SourceDef) extends TopLevelOp
 
-  final case class Assignment[+A <: Value](name: Name, expr: Expr[A]) { def resultType: ValueType = expr.resultType }
+  final case class Assignment(name: Name, expr: Expr[Value]) { def resultType: ValueType = expr.resultType }
 
   sealed trait Expr[+A <: Value] { def resultType: ValueType }
   final case class Column[A <: Value](name: Name, resultType: ValueType) extends Expr[A]

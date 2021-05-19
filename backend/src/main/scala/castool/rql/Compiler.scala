@@ -17,12 +17,12 @@ object Compiled {
 
   sealed trait TopLevelOp extends Compiled
   final case class Where(expr: Expr[Bool], sourceDef: SourceDef) extends TopLevelOp
-  final case class Project(names: Seq[Assignment[Value]], sourceDef: SourceDef) extends TopLevelOp
-  final case class Assignment[A <: Value](name: Name, expr: Expr[A])
-  final case class Extend(assign: Assignment[Value], sourceDef: SourceDef) extends TopLevelOp
+  final case class Project(names: Seq[Assignment], sourceDef: SourceDef) extends TopLevelOp
+  final case class Assignment(name: Name, expr: Expr[_ <: Value])
+  final case class Extend(assign: Assignment, sourceDef: SourceDef) extends TopLevelOp
   final case class OrderBy(names: Seq[Name], order: Order, sourceDef: SourceDef) extends TopLevelOp
   final case class Aggregation(name: Name, initialValue: Value, aggr: (Value, InputRow) => Value, finalPhase: (Value, Num) => Value)
-  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Name], sourceDef: SourceDef) extends TopLevelOp
+  final case class Summarize(aggregations: Seq[Aggregation], groupBy: Seq[Assignment], sourceDef: SourceDef) extends TopLevelOp
 }
 
 object Compiler {
@@ -81,14 +81,15 @@ object Compiler {
         } yield Compiled.Project(compiledAssignments, sourceDef)
       case Checked.Extend(assign, sourceDef) =>
         for {
-          compiled <- compileAssignment[Value](assign)
+          compiled <- compileAssignment(assign)
         } yield Compiled.Extend(compiled, sourceDef)
       case Checked.OrderBy(names, order, sourceDef) =>
         ZIO.succeed(Compiled.OrderBy(names, order, sourceDef))
       case Checked.Summarize(aggregations, groupBy, sourceDef) =>
         for {
           compiledAggrs <- ZIO.foreach(aggregations)(compileAggregationCall)
-        } yield Compiled.Summarize(compiledAggrs, groupBy, sourceDef)
+          compiledGroupBy <- ZIO.foreach(groupBy)(compileAssignment)
+        } yield Compiled.Summarize(compiledAggrs, compiledGroupBy, sourceDef)
     }
   }
 
@@ -283,7 +284,7 @@ object Compiler {
     }
   }
 
-  def compileAssignment[A <: Value](assign: Checked.Assignment[A]): CompiledIO[Compiled.Assignment[A]] = {
+  def compileAssignment(assign: Checked.Assignment): CompiledIO[Compiled.Assignment] = {
     compileExpr(assign.expr).map { expr =>
       Compiled.Assignment(assign.name, expr)
     }

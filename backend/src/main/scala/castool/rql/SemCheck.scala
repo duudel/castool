@@ -80,13 +80,24 @@ object SemCheck {
               checkedAggrCall <- checkAggregationCall(aggr, sourceDef)
             } yield Checked.Aggregation(nameAndTok.name, checkedAggrCall)
           }
-          checkedGroupBy <- ZIO.foreach(groupBy) { case NameAndToken(name, tok) =>
-            ZIO.fromOption(sourceDef.get(name))
-              .map(valueType => name -> valueType)
-              .mapError(_ => Error(s"No such column as '${name.n}', used in group by", Location(tok.pos)))
+          checkedGroupBy <- ZIO.foreach(groupBy) {
+            case column: Ast.Column =>
+              for {
+                checkedExpr <- checkExpr(column, sourceDef)
+              } yield Checked.Assignment(column.name, checkedExpr)
+            case Ast.AssignmentExpr(nameAndTok, expr, pos) =>
+              for {
+                checkedExpr <- checkExpr(expr, sourceDef)
+              } yield Checked.Assignment(nameAndTok.name, checkedExpr)
           }
-          sourceDef = SourceDef(checkedGroupBy ++ checkedAggregations.map(a => a.name -> a.aggr.resultType))
-        } yield Checked.Summarize(checkedAggregations.toSeq, checkedGroupBy.map(_._1), sourceDef)
+          groupByNames = checkedGroupBy.map {
+            case Checked.Assignment(name, expr) => name -> expr.resultType
+          }
+          aggregationNames = checkedAggregations.map {
+            case Checked.Aggregation(name, aggr) => name -> aggr.resultType
+          }
+          sourceDef = SourceDef(groupByNames ++ aggregationNames)
+        } yield Checked.Summarize(checkedAggregations.toSeq, checkedGroupBy, sourceDef)
     }
   }
 
@@ -101,7 +112,7 @@ object SemCheck {
     }
   }
 
-  def checkAssignment(ast: Ast.AssignmentExpr, sourceDef: SourceDef): Result[Checked.Assignment[Value]] = {
+  def checkAssignment(ast: Ast.AssignmentExpr, sourceDef: SourceDef): Result[Checked.Assignment] = {
     checkExpr(ast.expr, sourceDef).map { expr =>
       Checked.Assignment(ast.name.name, expr)
     }

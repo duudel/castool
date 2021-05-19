@@ -80,7 +80,10 @@ object Execution {
             }
           ZStream.fromEffect(result)
         } else {
-          val keyFunc = (input: InputRow) => groupBy.map(input.values)
+          val keyFunc = (input: InputRow) => {
+            groupBy.map(g => g.expr.eval(input))
+          }
+          val groupByNames = groupBy.map(_.name)
           source.groupByKey(keyFunc).apply { case (key, stream) =>
             val result = stream
               .fold((initialValues, 0)) { case ((values, n), input) =>
@@ -96,7 +99,7 @@ object Execution {
                     val finalized = aggregation.finalPhase(value, Num(n))
                     (aggregation.name, finalized)
                   }
-                InputRow(groupBy.zip(key) ++ results)
+                InputRow(groupByNames.zip(key) ++ results)
               }
             ZStream.fromEffect(result)
           }
