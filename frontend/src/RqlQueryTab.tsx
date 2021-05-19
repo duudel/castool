@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { useWebsocket } from "./utils/UseWebsocketHook";
 import useSessionStorage from "./utils/UseSessionStorageHook";
 import useNotifyClickOutside from "./utils/UseNotifyClickOutside";
+import { RqlInstructions } from "./RqlInstructions";
 import * as rql from "./server-rql/index";
 
 interface ResultRow {
@@ -602,12 +603,18 @@ function RqlQueryTab(props: RqlQueryTabProps) {
     }
   }, [state.queryResult, page]);
 
+  const [showInstructions, setShowInstructions] = useState(false);
+
   const resultsNum = allRows.length;
 
   return (
     <TabContainer>
       <TopSection>
-        RQL query {wsStatus}
+        <Header>
+          <span>RQL query {wsStatus}</span>
+          <button onClick={() => setShowInstructions(!showInstructions)}>Help</button>
+        </Header>
+        {showInstructions && <RqlInstructions />}
         <QueryInput
           value={queryInput}
           rows={6}
@@ -650,6 +657,12 @@ const TopSection = styled.div`
   min-height: ${TOP_HEIGHT};
   padding: 2px;
   background-color: #fff;
+`;
+
+const Header = styled.div`
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
 `;
 
 const QueryInput = styled.textarea`
